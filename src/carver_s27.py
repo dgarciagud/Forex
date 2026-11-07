@@ -69,6 +69,7 @@ class Config:
     trend_fast: int = 16
     trend_slow: int = 64
     cost_mult: float = 1.0            # multiplicador sobre HALF_SPREAD (0 = sin costes)
+    buffer_frac: float = 0.10         # buffer = fracción de la posición con forecast 10 (mín. 1 lote)
     day_end_hour_utc: int = 21
     weights: dict = field(default_factory=dict)
 
@@ -85,7 +86,11 @@ def load_hourly(pair: str) -> pd.DataFrame:
 def trading_day(idx: pd.DatetimeIndex, day_end_hour: int) -> pd.DatetimeIndex:
     """Asigna cada barra horaria (marcada por su hora de inicio) a su día FX."""
     shift = 24 - day_end_hour
-    return (idx + pd.Timedelta(hours=shift)).floor("D").tz_localize(None)
+    d = (idx + pd.Timedelta(hours=shift)).floor("D").tz_localize(None)
+    dow = d.dayofweek
+    # restos del viernes noche -> viernes; domingo noche ya cae en lunes
+    d = d - pd.to_timedelta((dow == 5).astype(int), unit="D") + pd.to_timedelta((dow == 6).astype(int), unit="D")
+    return pd.DatetimeIndex(d)
 
 
 def daily_from_hourly(h: pd.DataFrame, day_end_hour: int) -> pd.Series:
@@ -171,6 +176,7 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
             k = cap_q * cfg.idm * w * cfg.tau / (16.0 * sp)       # unidades base por punto de forecast/10
             A = cfg.fc_scalar * att * k / (10.0 * sp) / lot       # lotes por unidad de precio
             nmax = cfg.fc_cap * k / 10.0 / lot                    # tope (|F|<=20) en lotes
+            buf = max(1.0, cfg.buffer_frac * k / lot)
             lo_b, hi_b = -nmax, nmax
             if cfg.trend_filter:
                 if tr > 0:
@@ -183,12 +189,13 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
 
             # posición óptima evaluada al cierre horario, limitada por el filtro
             n_opt = min(max(A * (E - c[i]), lo_b), hi_b)
-            # buffer de +-1 lote (equivalente a las órdenes límite del libro en
-            # pos+1 / pos-1): solo se opera si la óptima se aleja >= 1 lote
-            if n_opt - pos >= 1.0:
-                new_pos = math.floor(n_opt)
-            elif pos - n_opt >= 1.0:
-                new_pos = math.ceil(n_opt)
+            # buffer: solo se opera si la óptima se aleja >= buf lotes (con buf=1
+            # equivale a las órdenes límite del libro en pos+1 / pos-1)
+            # se opera hasta el borde del buffer (Carver)
+            if n_opt - pos >= buf:
+                new_pos = math.floor(n_opt - buf + 1.0)
+            elif pos - n_opt >= buf:
+                new_pos = math.ceil(n_opt + buf - 1.0)
             else:
                 new_pos = pos
             if new_pos != pos:
