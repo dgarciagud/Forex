@@ -69,6 +69,8 @@ class Config:
     trend_fast: int = 16
     trend_slow: int = 64
     cost_mult: float = 1.0            # multiplicador sobre HALF_SPREAD (0 = sin costes)
+    execution: str = "close"          # "close": a mercado al cierre; "limit": órdenes límite
+    limit_pen_mult: float = 1.0       # penetración exigida a la límite, en medios spreads
     buffer_frac: float = 0.10         # buffer = fracción de la posición con forecast 10 (mín. 1 lote)
     day_end_hour_utc: int = 21
     weights: dict = field(default_factory=dict)
@@ -188,11 +190,64 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
             A = max(A, 1e-12)
 
             # posición óptima evaluada al cierre horario, limitada por el filtro
-            n_opt = min(max(A * (E - c[i]), lo_b), hi_b)
+            if cfg.execution == "limit":
+                q = max(1, int(round(buf)))       # tamaño de cada orden límite (lotes)
+                p0 = o[i]
+                hs_raw = HALF_SPREAD[pair]
+                pen = hs_raw * cfg.limit_pen_mult
+                # 1) reducciones obligadas (filtro de tendencia / tope): a mercado
+                if pos > hi_b:
+                    d = pos - math.floor(hi_b)
+                    pos -= d; bar_pnl -= d * lot * (c[i] - p0)
+                    bar_cost += d * lot * half_spread; nfills += d
+                elif pos < lo_b:
+                    d = math.ceil(lo_b) - pos
+                    pos += d; bar_pnl += d * lot * (c[i] - p0)
+                    bar_cost += d * lot * half_spread; nfills += d
+                start = pos
+                # 2) escalera de compras fijada al inicio de la vela: nivel j en el
+                #    precio donde la posición óptima = start + j*q
+                prev = start
+                for j in range(1, 1000):
+                    tgt = min(start + j * q, math.floor(hi_b))
+                    if tgt <= prev:
+                        break
+                    level = math.inf if tgt <= lo_b else E - tgt / A
+                    if level >= p0:                       # ya ejecutable: a mercado
+                        fpx, cst = p0, half_spread
+                    elif lo[i] <= level - pen:            # la vela atraviesa el límite
+                        fpx, cst = level, 0.0
+                    else:
+                        break
+                    d = tgt - prev
+                    bar_pnl += d * lot * (c[i] - fpx); bar_cost += d * lot * cst
+                    nfills += d; prev = tgt
+                bought = prev - start
+                prev = start
+                for j in range(1, 1000):
+                    tgt = max(start - j * q, math.ceil(lo_b))
+                    if tgt >= prev:
+                        break
+                    level = -math.inf if tgt >= hi_b else E - tgt / A
+                    if level <= p0:
+                        fpx, cst = p0, half_spread
+                    elif hi[i] >= level + pen:
+                        fpx, cst = level, 0.0
+                    else:
+                        break
+                    d = prev - tgt
+                    bar_pnl -= d * lot * (c[i] - fpx); bar_cost += d * lot * cst
+                    nfills += d; prev = tgt
+                pos = start + bought - (start - prev)
+                n_opt = None
+            else:
+                n_opt = min(max(A * (E - c[i]), lo_b), hi_b)
             # buffer: solo se opera si la óptima se aleja >= buf lotes (con buf=1
             # equivale a las órdenes límite del libro en pos+1 / pos-1)
             # se opera hasta el borde del buffer (Carver)
-            if n_opt - pos >= buf:
+            if n_opt is None:
+                new_pos = pos
+            elif n_opt - pos >= buf:
                 new_pos = math.floor(n_opt - buf + 1.0)
             elif pos - n_opt >= buf:
                 new_pos = math.ceil(n_opt + buf - 1.0)

@@ -93,3 +93,39 @@ Caveats: la S27 implementada es la interpretación descrita arriba (filtro de te
 atenuación de vol sobre la S26); ambos componentes son configurables en `Config`. Parte del
 resultado del filtro de tendencia proviene de mantener posiciones solo en la dirección de la
 tendencia, es decir, contiene algo de exposición *trend following*.
+
+## Ejecución con órdenes límite (sin pagar spread)
+
+`python src/run_limit.py` → `results/ejecucion_limite.csv`, `results/equity_limite_1h.png`.
+
+Modelo: al inicio de cada vela se coloca una escalera de órdenes límite fija (tamaño de
+orden = buffer; nivel *j* en el precio donde la posición óptima = posición + *j*·orden).
+Una orden se llena **al precio límite, sin spread**, si la vela lo atraviesa. Las órdenes no
+se recolocan dentro de la vela (así no se inventa el orden intra-vela; en paseo aleatorio
+el Sharpe sale ≈ 0). Las órdenes que ya son ejecutables al abrir la vela (cambio diario del
+equilibrio) y los cierres obligados por el filtro de tendencia se ejecutan a mercado
+pagando medio spread: de ahí el coste residual.
+
+Como los datos de HistData son precios **bid**, una venta límite se llena cuando el bid toca
+el nivel, pero una compra límite necesita que el *ask* llegue, es decir, que el bid lo
+atraviese un spread completo. **El caso realista es «atravesar ½ spread» (media de ambos lados)**;
+«al tocar» es el optimista (además ignora la cola de órdenes).
+
+### Sharpe de la cartera, velas 1h (buffer 10 % / 25 %)
+
+| Variante | Mercado, ½ spread | Mercado, sin costes | Límite al tocar | **Límite, atravesar ½ spread** | Límite, atravesar 1 spread |
+|---|---|---|---|---|---|
+| S26 | −0.07 / −0.01 | 0.54 / 0.35 | 0.62 / 0.67 | −0.36 / −0.05 | −1.08 / −0.61 |
+| S27 solo tendencia | 0.42 / **0.46** | 1.07 / 0.79 | 1.07 / **1.14** | −0.12 / 0.29 | −1.03 / −0.40 |
+| S27 completa | 0.25 / 0.32 | 0.99 / 0.71 | 0.87 / 1.00 | −0.45 / −0.03 | −1.41 / −0.81 |
+
+Con velas de 2h el patrón es el mismo (S27 solo tendencia, 25 %: 0.32 mercado, 1.12 al tocar,
+0.31 atravesando ½ spread).
+
+**Conclusión:** las órdenes límite **solo mejoran si se llenan en cuanto el precio toca el
+nivel** (Sharpe ~1.1). Si se exige el cruce realista del spread, la selección adversa
+(solo te llenan cuando el precio sigue en tu contra; te pierdes los rebotes que se dan
+justo en el nivel) se come la ventaja y el resultado es **igual o peor que ejecutar a
+mercado** (0.29 vs 0.46). Por pares, EURCHF y EURNOK aguantan mejor con límites;
+USDCAD y USDJPY empeoran. La ventaja de la estrategia en FX spot es del orden del spread,
+por lo que el resultado depende casi por completo de la calidad de ejecución.
