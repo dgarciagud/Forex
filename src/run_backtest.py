@@ -44,10 +44,16 @@ def to_daily(res, col):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", default="2010-01-01")
+    ap.add_argument("--bar", default="1h", help="tamaño de vela: 1h o 2h")
     a = ap.parse_args()
-    RESULTS.mkdir(exist_ok=True)
+    global RESULTS
+    RESULTS = ROOT / "results" / a.bar
+    RESULTS.mkdir(parents=True, exist_ok=True)
 
     hourly = {p: load_hourly(p) for p in PAIRS + ["EURUSD"]}
+    if a.bar != "1h":
+        agg = {"open": "first", "high": "max", "low": "min", "close": "last"}
+        hourly = {p: h.resample(a.bar).agg(agg).dropna() for p, h in hourly.items()}
     base = Config(weights={p: 1 / len(PAIRS) for p in PAIRS})
     daily_px = {p: daily_from_hourly(h, base.day_end_hour_utc) for p, h in hourly.items()}
 
