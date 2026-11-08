@@ -22,8 +22,9 @@ PAIRS = ["EURCHF", "EURNOK", "USDCAD", "USDJPY"]
 
 VARIANTS = {
     "S26 mean reversion": dict(trend_filter=False, vol_attenuation=False),
-    "S27 solo filtro tendencia": dict(trend_filter=True, vol_attenuation=False),
-    "S27 completa": dict(trend_filter=True, vol_attenuation=True),
+    # Carver: con el filtro la estrategia está apagada ~50 % del tiempo -> escalar ~20
+    "S27 solo filtro tendencia": dict(trend_filter=True, vol_attenuation=False, fc_scalar=20.0),
+    "S27 completa": dict(trend_filter=True, vol_attenuation=True, fc_scalar=20.0),
 }
 BUFFERS = {"1 lote": 0.0, "10%": 0.10, "25%": 0.25, "50%": 0.50}
 

@@ -129,3 +129,30 @@ justo en el nivel) se come la ventaja y el resultado es **igual o peor que ejecu
 mercado** (0.29 vs 0.46). Por pares, EURCHF y EURNOK aguantan mejor con límites;
 USDCAD y USDJPY empeoran. La ventaja de la estrategia en FX spot es del orden del spread,
 por lo que el resultado depende casi por completo de la calidad de ejecución.
+
+## Revisión contra el libro (v2)
+
+Contrastado con el capítulo de la estrategia 27 (ver `docs/carver_estrategias.md`). Cambios:
+
+1. **Escalar del forecast 20 en la S27** (no 9.3): el filtro apaga la estrategia ~50 % del
+   tiempo y Carver duplica el escalar. La vol de la cartera sube de ~11 % a ~15 %.
+2. **Llenados retrasados una vela** en la ejecución a mercado, como hace Carver. Antes se
+   operaba al mismo cierre que generaba la señal: en datos reales eso captura el rebote
+   bid/ask y **inflaba el resultado** (Sharpe bruto ~1.0 → ~0.5).
+
+### Resultados v2 (cartera, 1h, buffer 10 %/25 %)
+
+| Variante | Mercado ½ spread | Mercado sin costes | Límite al tocar | Límite atravesar ½ spread |
+|---|---|---|---|---|
+| S26 | −0.42 / – | 0.44 / – | – | – |
+| S27 solo tendencia | −0.34 / −0.08 | 0.56 / 0.46 | 0.93 / **1.13** | −0.48 / −0.12 |
+| S27 completa | −0.49 / −0.21 | 0.47 / 0.39 | 0.80 / 1.00 | −0.68 / −0.35 |
+
+Con 2h el patrón es igual (S27 solo tendencia 25 %: −0.05 mercado, 1.04 al tocar, 0.01 atravesando ½ spread).
+
+**Conclusión v2:** con supuestos realistas la S27 **no es rentable en estos 4 pares de FX spot**.
+Solo funciona si las órdenes límite se llenan al tocar el nivel (SR ~1, comparable al 0.54
+por instrumento del libro, que también asume solo comisiones). La diferencia entre "al tocar"
+y "cruzar ½ spread" es todo el resultado: la estrategia vive o muere por la microestructura.
+Por pares, EURCHF y EURNOK son los únicos con señal con límites; USDCAD/USDJPY pierden.
+Las tablas de las secciones anteriores corresponden a la v1 (sin retraso ni escalar 20).

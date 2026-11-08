@@ -69,6 +69,7 @@ class Config:
     trend_fast: int = 16
     trend_slow: int = 64
     cost_mult: float = 1.0            # multiplicador sobre HALF_SPREAD (0 = sin costes)
+    fill_lag: int = 1                 # "close": se ejecuta 1 vela después de la señal (como Carver)
     execution: str = "close"          # "close": a mercado al cierre; "limit": órdenes límite
     limit_pen_mult: float = 1.0       # penetración exigida a la límite, en medios spreads
     buffer_frac: float = 0.10         # buffer = fracción de la posición con forecast 10 (mín. 1 lote)
@@ -162,6 +163,7 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
     pos_out = np.zeros(n)
     fills_out = np.zeros(n)
     prev_c = np.nan
+    pending = None
 
     for i in range(n):
         E, sp, tr, att, fxq = eq_a[i], sp_a[i], tr_a[i], at_a[i], qpu_a[i]
@@ -245,6 +247,14 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
             # buffer: solo se opera si la óptima se aleja >= buf lotes (con buf=1
             # equivale a las órdenes límite del libro en pos+1 / pos-1)
             # se opera hasta el borde del buffer (Carver)
+            if cfg.execution == "close" and cfg.fill_lag:
+                # ejecuta ahora (al cierre de esta vela) la orden decidida en la vela anterior
+                if pending is not None and pending != pos:
+                    d = abs(pending - pos)
+                    bar_cost += d * lot * half_spread
+                    nfills = d
+                    pos = pending
+                pending = None
             if n_opt is None:
                 new_pos = pos
             elif n_opt - pos >= buf:
@@ -253,7 +263,9 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
                 new_pos = math.ceil(n_opt + buf - 1.0)
             else:
                 new_pos = pos
-            if new_pos != pos:
+            if cfg.execution == "close" and cfg.fill_lag:
+                pending = new_pos
+            elif new_pos != pos:
                 nfills = abs(new_pos - pos)
                 bar_cost += nfills * lot * half_spread
                 pos = new_pos
