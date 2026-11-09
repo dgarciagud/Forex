@@ -89,12 +89,14 @@ python -m pytest live/tests -q
 
 ## Avisos importantes
 
-* **El backtest del repo no avala operar la estrategia 27 tal cual en FX al contado.** La ventaja
-  bruta existe, pero es del orden del spread. Con órdenes límite y un llenado realista (cruzar
-  medio spread) el Sharpe neto quedaba cerca de 0. EURNOK salía demasiado caro y **EURUSD no se
-  ha probado**. La atenuación por volatilidad no aportaba. El modo `market` con
-  `buffer_fraction = 0.25` y sin atenuación era la variante más robusta (Sharpe ≈ 0,46). Ambas
-  opciones están en `config.toml`.
+* **El backtest del repo no avala operar la estrategia 27 en FX al contado.** Según la revisión
+  v3 del README principal (S27 completa, velas de 1h), con supuestos de llenado realistas pierde:
+  a mercado pagando medio spread, Sharpe −0,82 sin buffer y −0,21 con buffer del 25 %; con
+  órdenes límite que deben cruzar medio spread, entre −0,93 y −0,35. Solo es positiva sin costes
+  o si las límites se llenan al tocar el nivel (0,60–1,00), que es optimista. La ventaja bruta
+  es del orden del spread, EURNOK es demasiado caro y **EURUSD no se ha probado**. Las variantes
+  (`execution`, `buffer_fraction`, `vol_attenuation`) están en `config.toml`, pero ninguna está
+  demostrada: usa la demo para medir los llenados reales antes de arriesgar dinero.
 * **Los swaps no están en el backtest.** La estrategia mantiene posiciones de un día para otro (y
   el miércoles se cobra swap triple).
 * Las órdenes límite en real tienen cola y selección adversa. Compara los llenados reales de
