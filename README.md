@@ -180,3 +180,24 @@ forecasts, buffer 10 %, ejecución al cierre del día siguiente, medio spread. *
 * Conclusión: en estos 4 pares la tendencia/breakout no ha funcionado en 2010–2025, muy lejos
   del SR 1.17 del libro, que se apoya en la diversificación de >100 futuros. Si se usa, mejor
   solo las variantes lentas (160/320) y añadiendo carry.
+
+## Revisión con la especificación completa (v3)
+
+Contrastado con `docs/carver_estrategias.md` (extraída de los libros por otra sesión):
+* E26/E27: escalares 9.3 / 20, filtro EWMAC16, atenuación M = EWMA₁₀(2 − 1.5·Q) y retraso de
+  una vela: **coinciden** con la implementación.
+* E26/E27 **sin buffer** en el libro (órdenes límite a ±1 contrato de la posición actual). Se
+  añade esa variante ("libro (1 lote)") a `run_limit.py`.
+* E21: FDM de las tablas del libro (6 breakout → 1.33; 4 EWMAC → 1.13) en vez del estimado.
+
+| S27 completa, 1h, Sharpe | Libro (sin buffer) | Buffer 10 % | Buffer 25 % |
+|---|---|---|---|
+| Mercado, medio spread | −0.82 | −0.49 | −0.21 |
+| Mercado, sin costes | 0.51 | 0.47 | 0.39 |
+| Límite al tocar | 0.60 | 0.80 | 1.00 |
+| Límite, atravesar ½ spread (realista) | −0.93 | −0.68 | −0.35 |
+
+Sin buffer opera ~900–2.000 lotes/día (con lotes de 10.000) y el coste sube al 15–21 % anual;
+en FX spot es mejor un buffer amplio. La conclusión no cambia: con supuestos de llenado
+realistas la estrategia 27 pierde en estos pares. Breakout con FDM del libro: SR neto 0.09
+(sin cambios relevantes).

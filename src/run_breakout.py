@@ -53,8 +53,10 @@ def main():
     for name, wts in STRATS.items():
         w = pd.Series(wts)
         fcs = {p: fc_all[p][list(wts)] for p in PAIRS}
-        f_dm = fdm({p: fcs[p][fcs[p].index < start] if (fcs[p].index < start).sum() > 300 else fcs[p]
-                    for p in PAIRS}, w)
+        # FDM de las tablas del libro (6 breakout 1.33, 4 EWMAC 1.13); la mezcla se estima
+        f_dm = {"S21 Breakout": 1.33, "S9 Tendencia EWMAC": 1.13}.get(name) or fdm(
+            {p: fcs[p][fcs[p].index < start] if (fcs[p].index < start).sum() > 300 else fcs[p]
+             for p in PAIRS}, w)
         comb = {p: ((fcs[p] * w).sum(axis=1, min_count=1) * f_dm).clip(-20, 20) for p in PAIRS}
         for cm, tag in ((0.0, "bruto"), (1.0, "neto")):
             port, daily, extra = backtest(comb, cm)

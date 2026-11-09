@@ -36,18 +36,18 @@ def main():
         daily_px = {p: daily_from_hourly(h, base.day_end_hour_utc) for p, h in hourly.items()}
         for vname in ("S26 mean reversion", "S27 solo filtro tendencia", "S27 completa"):
             for ename, ekw in EXEC.items():
-                for buf in (0.10, 0.25):
+                for buf in (0.0, 0.10, 0.25):   # 0.0 = sin buffer (1 lote), como el libro
                     cfg = replace(base, buffer_frac=buf, **VARIANTS[vname], **ekw)
                     pp = run(cfg, hourly, daily_px, a.start)
                     port, daily, extra = summarise(pp, cfg)
                     st = stats(port)
                     per = {f"SR {p}": stats(daily[p])["sharpe"] for p in PAIRS}
                     rows.append({"vela": bar, "variante": vname, "ejecución": ename,
-                                 "buffer": f"{int(buf*100)}%", "sharpe": st["sharpe"],
+                                 "buffer": "libro (1 lote)" if buf == 0 else f"{int(buf*100)}%", "sharpe": st["sharpe"],
                                  "ret_anual_%": st["ret_anual_%"], "vol_anual_%": st["vol_anual_%"],
                                  "max_dd_%": st["max_dd_%"], "skew_mensual": st["skew_mensual"],
                                  **extra, **per})
-                    if bar == "1h" and buf == 0.10 and vname != "S26 mean reversion":
+                    if bar == "1h" and buf == 0.0 and vname != "S26 mean reversion":
                         curves[f"{vname} | {ename}"] = port
                     print(rows[-1]["vela"], vname, ename, buf, round(st["sharpe"], 2), flush=True)
     df = pd.DataFrame(rows).round(3)
@@ -58,7 +58,7 @@ def main():
     for k, s in curves.items():
         if "S27 solo" in k:
             ax.plot(s.cumsum() * 100, label=k)
-    ax.set_title("S27 (filtro de tendencia), 1h, buffer 10 % – ejecución a mercado vs límite")
+    ax.set_title("S27 (filtro de tendencia), 1h, sin buffer (libro) – ejecución a mercado vs límite")
     ax.set_ylabel("% del capital (suma, sin componer)")
     ax.grid(alpha=0.3)
     ax.legend()
