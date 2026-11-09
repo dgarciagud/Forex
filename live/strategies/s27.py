@@ -106,11 +106,11 @@ def _nmax(n_avg: float, max_steps: int, params: dict) -> int:
 
 
 def _floor_tick(price: float, tick: float) -> float:
-    return math.floor(price / tick + 1e-9) * tick
+    return round(math.floor(price / tick + 1e-9) * tick, 10)
 
 
 def _ceil_tick(price: float, tick: float) -> float:
-    return math.ceil(price / tick - 1e-9) * tick
+    return round(math.ceil(price / tick - 1e-9) * tick, 10)
 
 
 @dataclass

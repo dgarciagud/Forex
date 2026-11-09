@@ -196,6 +196,13 @@ class Engine:
         # --- 3. estado diario (una vez por vela D1 completa)
         if slot.daily is None or self._new_daily(a, slot, tick):
             closes = self.b.daily_closes(a.symbol, tick.time)
+            age_days = (tick.time - closes.index[-1].timestamp()) / 86400 if len(closes) else 99
+            if age_days > 6:   # margen para fin de semana + festivo
+                # al pedir historial por primera vez MT5 puede devolver velas viejas mientras
+                # sincroniza: no usar y reintentar en el siguiente ciclo
+                self.n.send(f"{a.key}: último cierre D1 de hace {age_days:.1f} días; esperando "
+                            "historial actualizado", key=f"stale:{a.key}", every_s=6 * 3600)
+                return
             if not self._refresh_daily(a, slot, sp, spec, closes):
                 return
         st = slot.daily
@@ -219,8 +226,8 @@ class Engine:
             plan = s27.plan_limit(st, slot.n_avg, slot.max_steps, pos, tick.bid, tick.ask,
                                   spec.tick, a.sides, a.mode, sp)
         if not trade:
-            log.info("%s pos=%d rango=[%d,%d] óptima=%.2f compra=%s venta=%s mercado=%d %s",
-                     a.key, pos, plan.lo, plan.hi, plan.optimal, plan.buy_limit,
+            log.info("%s bid=%s ask=%s pos=%d rango=[%d,%d] óptima=%.2f compra=%s venta=%s mercado=%d %s",
+                     a.key, tick.bid, tick.ask, pos, plan.lo, plan.hi, plan.optimal, plan.buy_limit,
                      plan.sell_limit, plan.market_steps, plan.reason)
             return
 
