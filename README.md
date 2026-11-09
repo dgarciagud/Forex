@@ -156,3 +156,27 @@ por instrumento del libro, que también asume solo comisiones). La diferencia en
 y "cruzar ½ spread" es todo el resultado: la estrategia vive o muere por la microestructura.
 Por pares, EURCHF y EURNOK son los únicos con señal con límites; USDCAD/USDJPY pierden.
 Las tablas de las secciones anteriores corresponden a la v1 (sin retraso ni escalar 20).
+
+## Estrategia 21 – Breakout (diaria)
+
+`python src/run_breakout.py` → `results/breakout/`. Implementación en `src/carver_daily.py`
+(especificación en `docs/carver_estrategias.md`). Seis variantes N = 10…320 días, comparado con
+EWMAC 8/16/32/64 (estrategia 9) y con la mezcla 50/50. FDM estimado con la correlación de los
+forecasts, buffer 10 %, ejecución al cierre del día siguiente, medio spread. **Sin carry**
+(ni regla de carry ni swaps): en FX spot requiere datos de tipos de interés.
+
+| Estrategia (2010–2025, neto) | Sharpe | Ret. anual | Vol | Max DD | Sharpe sin el 15‑ene‑2015 |
+|---|---|---|---|---|---|
+| S21 Breakout | 0.09 | 2.4 % | 27.5 % | −59 % | −0.22 |
+| S9 Tendencia EWMAC | 0.05 | 0.8 % | 17.8 % | −64 % | −0.06 |
+| Breakout + EWMAC | 0.06 | 1.4 % | 21.7 % | −63 % | −0.14 |
+
+* El 15‑ene‑2015 (fin del suelo del EURCHF) el breakout gana **+92 % del capital en un día**:
+  con la vol del EURCHF casi nula durante el suelo, la posición era enorme y estaba corta.
+  Es un resultado real del método de sizing, pero no repetible; sin ese día todo pierde.
+* Por variantes (neto): solo las lentas ganan — breakout 320 SR 0.38, 160 SR 0.18; EWMAC64 0.29.
+  Las rápidas (breakout 10/20/40, EWMAC8/16) pierden incluso antes de costes.
+* Por pares: EURCHF y USDJPY positivos; EURNOK y USDCAD negativos.
+* Conclusión: en estos 4 pares la tendencia/breakout no ha funcionado en 2010–2025, muy lejos
+  del SR 1.17 del libro, que se apoya en la diversificación de >100 futuros. Si se usa, mejor
+  solo las variantes lentas (160/320) y añadiendo carry.

@@ -27,3 +27,17 @@ son imágenes y no se extraen del PDF; donde un parámetro no se ha podido verif
   instrumento 0.54 (FX 0.54), skew mensual mediano −0.57; cartera Jumbo SR 2.14
   (el autor advierte que no se fía de SR > 2: periodo corto, dificultad de testear límites con datos horarios).
 * Correlación con tendencia ≈ +0.34; asignación sugerida ~20 % del capital junto a estrategias diarias.
+
+## Estrategia 21 – Breakout (Part Three)
+* Estrategia diaria de tipo tendencia. Para un horizonte de N días: máximo y mínimo de los
+  cierres de los últimos N días; forecast bruto = 40 × (precio − punto medio) / (máx − mín),
+  acotado de forma natural en ±20; se suaviza con EWMA de span N/4 (elección arbitraria,
+  comprobada como robusta) y se aplica un escalar de forecast (no es 1 porque el precio no
+  se distribuye uniformemente dentro del rango). Similar al oscilador estocástico de Lane.
+* Seis variantes N = 10, 20, 40, 80, 160, 320 con igual peso; tope ±20; FDM.
+* Combinación del libro con carry y EWMAC: 40 % carry, 30 % EWMAC, 30 % breakout.
+* Resto del plan igual a la estrategia 9 (sizing por vol, buffer, IDM).
+* Libro (Jumbo, futuros): breakout solo SR 1.17; correlación con EWMAC 0.97; añadirlo a
+  carry+tendencia mejora poco (SR 1.27 → 1.29).
+* Escalares usados (valores publicados por Carver, no verificados en el texto extraído):
+  0.60, 0.67, 0.70, 0.73, 0.74, 0.74 para N = 10…320.
