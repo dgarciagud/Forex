@@ -2,7 +2,7 @@
 # Las rutas relativas son relativas a esta carpeta (live/).
 
 [general]
-mode = "dry_run"        # "dry_run": calcula y registra sin enviar órdenes | "live": opera de verdad
+mode = "live"           # "dry_run": calcula y registra sin enviar órdenes | "live": opera de verdad
 poll_seconds = 5
 state_dir = "state"     # bloqueos (locks.json) y aprobaciones de saltos de precio
 log_dir = "logs"        # live.log, acciones.csv, estado_diario.csv
@@ -18,12 +18,14 @@ max_trades_per_day = 30     # por asignación; si se supera, se bloquea
 spike_sigma = 8.0           # cierre diario que se mueve > N desviaciones -> bloqueo hasta aprobar
 max_tick_age_seconds = 120  # sin ticks nuevos durante este tiempo -> no se opera (fin de semana, caída)
 deviation_points = 20       # deslizamiento máximo de las órdenes a mercado
+max_spread_mult = 3.0       # no ir a mercado si el spread > N veces su mediana de la última hora
 min_history_days = 500      # velas D1 mínimas (la vol usa media de 10 años y percentil histórico)
 blackout_start = "23:45"    # hora del SERVIDOR (Darwinex GMT+2/+3: medianoche = cierre de NY).
 blackout_end = "00:20"      # en la ventana se cancelan las pendientes y no se opera (spreads de rollover)
 
 [mt5]
 path = ""               # ruta a terminal64.exe si hay varios terminales; vacío = el que está abierto
+expect_server = "Darwinex-Demo"  # se niega a operar si el terminal está en otro servidor (cuenta real: cambiarlo a mano)
 
 [strategies.s27]
 magic = 270001

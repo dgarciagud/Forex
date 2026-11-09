@@ -19,6 +19,8 @@ import logging
 import logging.handlers
 import os
 import time
+import statistics
+from collections import deque
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -72,6 +74,7 @@ class Slot:
     tick_time: int = 0
     tick_seen_at: float = 0.0
     dry: dict = field(default_factory=dict)   # últimas órdenes simuladas (evita repetir logs)
+    spreads: deque = field(default_factory=lambda: deque(maxlen=720))  # ~1 h de spreads
 
 
 class Locks:
@@ -193,6 +196,7 @@ class Engine:
                 self.b.cancel_all(a.symbol, magic)
             return
 
+        slot.spreads.append(tick.ask - tick.bid)
         # --- 3. estado diario (una vez por vela D1 completa)
         if slot.daily is None or self._new_daily(a, slot, tick):
             closes = self.b.daily_closes(a.symbol, tick.time)
@@ -238,6 +242,8 @@ class Engine:
             if slot.dry.get("plan") == snap:
                 return
             slot.dry["plan"] = snap
+        if plan.market_steps and not self._spread_ok(a, slot, tick):
+            return
         if plan.market_steps:
             self.b.cancel_all(a.symbol, magic)
             ok = self.b.market(a.symbol, plan.market_steps * spec.step, magic, a.strategy)
@@ -247,6 +253,20 @@ class Engine:
         self._sync_limit(a, magic, spec, tick, "sell", plan.sell_limit)
 
     # ---------------------------------------------------------------- piezas
+    def _spread_ok(self, a, slot: Slot, tick) -> bool:
+        """Órdenes a mercado solo con spread normal (evita la apertura del domingo y el rollover)."""
+        if len(slot.spreads) < 30:
+            log.info("%s: esperando muestras de spread antes de operar a mercado", a.key)
+            return False
+        normal = statistics.median(slot.spreads)
+        spread = tick.ask - tick.bid
+        if spread > self.s.max_spread_mult * normal:
+            self.n.send(f"{a.key}: spread {spread:.6g} > {self.s.max_spread_mult}× el normal "
+                        f"({normal:.6g}); se aplaza la orden a mercado", key=f"spread:{a.key}",
+                        every_s=1800)
+            return False
+        return True
+
     def _reconcile(self, a, slot: Slot, magic: int, spec, day: str) -> int | None:
         before = self.b.deals_after(a.symbol, magic, slot.last_ticket)
         lots, longs, shorts = self.b.position_lots(a.symbol, magic)
@@ -371,7 +391,8 @@ def main() -> None:
     _setup_logging(settings.log_dir)
     from live.broker import MT5Broker
     broker = MT5Broker(dry_run=settings.dry_run or args.status,
-                       deviation_points=settings.deviation_points, path=settings.mt5_path)
+                       deviation_points=settings.deviation_points, path=settings.mt5_path,
+                       expect_server=settings.expect_server)
     broker.connect()
     log.info("IDM %.2f, riesgo %.0f%%, capital %s, asignaciones: %s", settings.idm,
              100 * settings.risk_target, settings.capital or "equity",

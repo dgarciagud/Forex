@@ -62,6 +62,8 @@ class Settings:
     blackout_start: str
     blackout_end: str
     mt5_path: str | None
+    expect_server: str | None
+    max_spread_mult: float
     strategies: dict[str, dict] = field(default_factory=dict)
     assignments: list[Assignment] = field(default_factory=list)
 
@@ -139,6 +141,7 @@ def load(path: str | Path) -> Settings:
     capital = None if capital == "equity" else float(capital)
 
     mt5_path = raw.get("mt5", {}).get("path") or None
+    expect_server = raw.get("mt5", {}).get("expect_server") or None
     return Settings(
         path=path,
         run_mode=run_mode,
@@ -157,6 +160,8 @@ def load(path: str | Path) -> Settings:
         blackout_start=_hhmm(saf.get("blackout_start", "23:45"), "blackout_start"),
         blackout_end=_hhmm(saf.get("blackout_end", "00:20"), "blackout_end"),
         mt5_path=mt5_path,
+        expect_server=expect_server,
+        max_spread_mult=float(saf.get("max_spread_mult", 3.0)),
         strategies=strategies,
         assignments=assignments,
     )

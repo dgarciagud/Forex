@@ -30,6 +30,7 @@ class SymbolSpec:
     digits: int
     stops_distance: float
     filling: int         # tipo de llenado para órdenes a mercado
+    order_time: int = 0  # ORDER_TIME_DAY si el símbolo lo admite (caduca al final del día del servidor)
 
 
 @dataclass
@@ -48,12 +49,14 @@ class PendingOrder:
 
 
 class MT5Broker:
-    def __init__(self, dry_run: bool, deviation_points: int = 20, path: str | None = None):
+    def __init__(self, dry_run: bool, deviation_points: int = 20, path: str | None = None,
+                 expect_server: str | None = None):
         import MetaTrader5 as mt5  # solo existe en Windows con el terminal instalado
         self.mt5 = mt5
         self.dry_run = dry_run
         self.deviation = deviation_points
         self.path = path
+        self.expect_server = expect_server
         self._specs: dict[str, SymbolSpec] = {}
         self.currency = ""
 
@@ -69,6 +72,9 @@ class MT5Broker:
         if acc.margin_mode != mt5.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING:
             raise BrokerError("este sistema está pensado para una cuenta hedge")
         self.currency = acc.currency
+        if self.expect_server and acc.server != self.expect_server:
+            raise BrokerError(f"el terminal está en el servidor {acc.server!r} y la configuración "
+                              f"exige {self.expect_server!r}: no se opera")
         term = mt5.terminal_info()
         if not self.dry_run and (term is None or not term.trade_allowed):
             raise BrokerError("activa 'Algo Trading' en el terminal MT5")
@@ -113,6 +119,7 @@ class MT5Broker:
             digits=info.digits,
             stops_distance=info.trade_stops_level * info.point,
             filling=filling,
+            order_time=(mt5.ORDER_TIME_DAY if info.expiration_mode & 2 else mt5.ORDER_TIME_GTC),
         )
         self._specs[symbol] = spec
         return spec
@@ -223,7 +230,7 @@ class MT5Broker:
             "price": round(price, spec.digits),
             "magic": magic,
             "comment": comment,
-            "type_time": mt5.ORDER_TIME_GTC,
+            "type_time": spec.order_time,
             "type_filling": mt5.ORDER_FILLING_RETURN,
         }
         return self._send(req, f"límite {side} {lots} {symbol} @ {req['price']}")
@@ -235,7 +242,7 @@ class MT5Broker:
             "order": order.ticket,
             "symbol": symbol,
             "price": round(price, spec.digits),
-            "type_time": self.mt5.ORDER_TIME_GTC,
+            "type_time": spec.order_time,
         }
         return self._send(req, f"mover {order.side} #{order.ticket} {symbol} -> {req['price']}")
 
