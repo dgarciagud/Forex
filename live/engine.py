@@ -256,7 +256,7 @@ class Engine:
     def _spread_ok(self, a, slot: Slot, tick) -> bool:
         """Órdenes a mercado solo con spread normal (evita la apertura del domingo y el rollover)."""
         if len(slot.spreads) < 30:
-            log.info("%s: esperando muestras de spread antes de operar a mercado", a.key)
+            log.debug("%s: esperando muestras de spread antes de operar a mercado", a.key)
             return False
         normal = statistics.median(slot.spreads)
         spread = tick.ask - tick.bid
@@ -393,7 +393,11 @@ def main() -> None:
     broker = MT5Broker(dry_run=settings.dry_run or args.status,
                        deviation_points=settings.deviation_points, path=settings.mt5_path,
                        expect_server=settings.expect_server)
-    broker.connect()
+    try:
+        broker.connect()
+    except Exception:
+        log.exception("no se pudo arrancar")
+        raise
     log.info("IDM %.2f, riesgo %.0f%%, capital %s, asignaciones: %s", settings.idm,
              100 * settings.risk_target, settings.capital or "equity",
              ", ".join(f"{a.key}[{a.sides},{a.mode},w={a.weight:.3f}]" for a in settings.active()))
