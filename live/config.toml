@@ -1,0 +1,84 @@
+# Sistema live de estrategias de Carver - Darwinex MT5 (cuenta hedge en EUR)
+# Las rutas relativas son relativas a esta carpeta (live/).
+
+[general]
+mode = "dry_run"        # "dry_run": calcula y registra sin enviar órdenes | "live": opera de verdad
+poll_seconds = 5
+state_dir = "state"     # bloqueos (locks.json) y aprobaciones de saltos de precio
+log_dir = "logs"        # live.log, acciones.csv, estado_diario.csv
+stop_file = "STOP"      # si existe: cancela pendientes y no opera; si contiene "flat" además cierra posiciones
+
+[account]
+capital = 1900          # EUR asignados; se usa min(capital, equity). "equity" = todo el equity (interés compuesto)
+risk_target = 0.20      # tau anual (AFTS)
+idm = "auto"            # "auto" = tabla de AFTS según nº de cruces activos (5 -> 1.70), o un número
+
+[safety]
+max_trades_per_day = 30     # por asignación; si se supera, se bloquea
+spike_sigma = 8.0           # cierre diario que se mueve > N desviaciones -> bloqueo hasta aprobar
+max_tick_age_seconds = 120  # sin ticks nuevos durante este tiempo -> no se opera (fin de semana, caída)
+deviation_points = 20       # deslizamiento máximo de las órdenes a mercado
+min_history_days = 500      # velas D1 mínimas (la vol usa media de 10 años y percentil histórico)
+blackout_start = "23:45"    # hora del SERVIDOR (Darwinex GMT+2/+3: medianoche = cierre de NY).
+blackout_end = "00:20"      # en la ventana se cancelan las pendientes y no se opera (spreads de rollover)
+
+[mt5]
+path = ""               # ruta a terminal64.exe si hay varios terminales; vacío = el que está abierto
+
+[strategies.s27]
+magic = 270001
+eq_span = 5             # equilibrio: EWMA de cierres diarios
+forecast_scalar = 20.0  # AFTS: 20 para la 27 (9.3 en la 26)
+forecast_cap = 20.0
+trend_fast = 16         # filtro de tendencia EWMAC(16,64) diario
+trend_slow = 64
+vol_attenuation = true  # multiplicador M = EWMA10(2 - 1.5 Q). En el backtest del repo no aportaba
+execution = "limit"     # "limit": escalera de órdenes límite del libro | "market": a mercado cada vela H1
+buffer_fraction = 0.10  # solo con execution = "market" (el backtest del repo prefería 0.25)
+
+# Una sección [[assignment]] por (estrategia, cruce).
+#   sides: "both" | "long" | "short" | "none"   (lados permitidos)
+#   mode:  "normal" | "reduce_only" (solo reducir) | "close" (cerrar y no abrir)
+#   weight: peso de instrumento (si se omite en todas, reparto igual entre las activas)
+#   size_mult: multiplicador manual de tamaño; max_lots: tope duro de posición
+#   enabled: false para desactivar sin borrar (las posiciones abiertas quedan sin gestionar)
+
+[[assignment]]
+strategy = "s27"
+symbol = "EURUSD"
+sides = "both"
+mode = "normal"
+max_lots = 0.10
+enabled = true
+
+[[assignment]]
+strategy = "s27"
+symbol = "USDJPY"
+sides = "both"
+mode = "normal"
+max_lots = 0.10
+enabled = true
+
+[[assignment]]
+strategy = "s27"
+symbol = "EURCHF"
+sides = "both"
+mode = "normal"
+max_lots = 0.10
+enabled = true
+
+[[assignment]]
+strategy = "s27"
+symbol = "USDCAD"
+sides = "both"
+mode = "normal"
+max_lots = 0.10
+enabled = true
+
+[[assignment]]
+strategy = "s27"
+symbol = "EURNOK"
+sides = "both"
+mode = "normal"
+max_lots = 0.10
+enabled = true

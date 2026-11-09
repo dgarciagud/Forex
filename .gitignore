@@ -1,3 +1,6 @@
 data/raw/
 data/raw_histdata/
 __pycache__/
+live/state/
+live/logs/
+live/STOP
