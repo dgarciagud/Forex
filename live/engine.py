@@ -75,6 +75,7 @@ class Slot:
     tick_seen_at: float = 0.0
     dry: dict = field(default_factory=dict)   # últimas órdenes simuladas (evita repetir logs)
     spreads: deque = field(default_factory=lambda: deque(maxlen=720))  # ~1 h de spreads
+    gap_cycles: int = 0  # ciclos seguidos con un nivel ya ejecutable
 
 
 class Locks:
@@ -250,9 +251,19 @@ class Engine:
             if slot.dry.get("plan") == snap:
                 return
             slot.dry["plan"] = snap
+        # Si el precio ya está en el nivel, la orden límite que hay allí puede estar llenándose
+        # y MT5 aún no lo refleja en la posición: esperar ~3 ciclos antes de ir a mercado para
+        # no duplicar la operación (pasó en EURCHF el 10-11-2026).
+        if plan.market_steps and plan.reason.startswith("nivel"):
+            slot.gap_cycles += 1
+            if slot.gap_cycles < 3:
+                return
+        else:
+            slot.gap_cycles = 0
         if plan.market_steps and not self._spread_ok(a, slot, tick):
             return
         if plan.market_steps:
+            slot.gap_cycles = 0
             self.b.cancel_all(a.symbol, magic)
             ok = self.b.market(a.symbol, plan.market_steps * spec.step, magic, a.strategy)
             self._action(a.key, "mercado", f"{plan.market_steps:+d} pasos ({plan.reason})", ok)
