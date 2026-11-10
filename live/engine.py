@@ -43,12 +43,12 @@ class Notifier:
         self._last: dict[str, float] = {}
 
     def send(self, text: str, key: str | None = None, every_s: float = 3600) -> None:
-        log.warning("AVISO: %s", text)
         if key:
             now = time.time()
             if now - self._last.get(key, 0) < every_s:
                 return
             self._last[key] = now
+        log.warning("AVISO: %s", text)
         if not (self.token and self.chat):
             return
         try:
@@ -113,6 +113,7 @@ class Engine:
         settings.state_dir.mkdir(parents=True, exist_ok=True)
         self.locks = Locks(settings.state_dir / "locks.json")
         self.slots: dict[str, Slot] = {a.key: Slot() for a in settings.assignments}
+        self.disconnected = 0
         self.magics = {v["magic"] for v in settings.strategies.values()}
         self.actions_csv = settings.log_dir / "acciones.csv"
         self.daily_csv = settings.log_dir / "estado_diario.csv"
@@ -149,7 +150,14 @@ class Engine:
     def cycle(self, trade: bool = True) -> None:
         self.locks.reload()
         if not self.b.connected():
-            self.n.send("MT5 desconectado", key="disconnected")
+            self.disconnected += 1
+            self.n.send("MT5 desconectado; reintentando la conexión", key="disconnected", every_s=900)
+            if self.disconnected % 6 == 0:          # cada ~30 s: rehacer el enlace con el terminal
+                self.b.reconnect()
+            return
+        if self.disconnected:
+            self.n.send(f"MT5 reconectado tras {self.disconnected} ciclos", key="reconnected", every_s=60)
+            self.disconnected = 0
             return
         stop = self._stop_state()
         if stop:

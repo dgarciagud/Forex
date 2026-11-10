@@ -82,6 +82,16 @@ class MT5Broker:
                  acc.login, acc.company, acc.server, acc.equity, acc.currency,
                  "dry_run" if self.dry_run else "LIVE")
 
+    def reconnect(self) -> bool:
+        """Rehace el enlace con el terminal (se rompe, p. ej., tras suspender el PC)."""
+        try:
+            self.mt5.shutdown()
+            self.connect()
+            return True
+        except Exception as exc:  # noqa: BLE001
+            log.warning("reconexión fallida: %s", exc)
+            return False
+
     def shutdown(self) -> None:
         self.mt5.shutdown()
 
