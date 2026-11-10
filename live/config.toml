@@ -36,7 +36,9 @@ trend_fast = 16         # filtro de tendencia EWMAC(16,64) diario
 trend_slow = 64
 vol_attenuation = true  # multiplicador M = EWMA10(2 - 1.5 Q). En el backtest del repo no aportaba
 execution = "limit"     # "limit": escalera de órdenes límite del libro | "market": a mercado cada vela H1
-buffer_fraction = 0.10  # solo con execution = "market" (el backtest del repo prefería 0.25)
+buffer_fraction = 1.0   # limit: cada orden = esta fracción de la posición media (mín. 1 paso = escalera del libro)
+                        # market: buffer. Backtest 2010-2025, 4 pares, límites cruzando ½ spread, sin comisión:
+                        # Sharpe -0.35 (0.25), 0.00 (0.5), 0.24 (1.0), 0.29 (1.5)
 
 # Una sección [[assignment]] por (estrategia, cruce).
 #   sides: "both" | "long" | "short" | "none"   (lados permitidos)

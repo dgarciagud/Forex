@@ -121,6 +121,11 @@ class Engine:
 
     # ---------------------------------------------------------------- utilidades
     def _record(self, path: Path, row: dict) -> None:
+        if path.exists():
+            with open(path, encoding="utf-8") as fh:
+                header = fh.readline().strip().split(",")
+            if header != list(row):          # cambiaron las columnas: archivar el CSV anterior
+                path.rename(path.with_name(f"{path.stem}_{datetime.now():%Y%m%d_%H%M%S}{path.suffix}"))
         new = not path.exists()
         with open(path, "a", newline="", encoding="utf-8") as fh:
             w = csv.DictWriter(fh, fieldnames=list(row))
@@ -247,7 +252,7 @@ class Engine:
         # --- 5. ejecución
         if self.b.dry_run:
             # en dry_run la posición no cambia: registrar solo cuando cambia el plan
-            snap = (plan.market_steps, plan.buy_limit, plan.sell_limit)
+            snap = (plan.market_steps, plan.buy_limit, plan.sell_limit, plan.buy_steps, plan.sell_steps)
             if slot.dry.get("plan") == snap:
                 return
             slot.dry["plan"] = snap
@@ -268,8 +273,8 @@ class Engine:
             ok = self.b.market(a.symbol, plan.market_steps * spec.step, magic, a.strategy)
             self._action(a.key, "mercado", f"{plan.market_steps:+d} pasos ({plan.reason})", ok)
             return
-        self._sync_limit(a, magic, spec, tick, "buy", plan.buy_limit)
-        self._sync_limit(a, magic, spec, tick, "sell", plan.sell_limit)
+        self._sync_limit(a, magic, spec, tick, "buy", plan.buy_limit, plan.buy_steps)
+        self._sync_limit(a, magic, spec, tick, "sell", plan.sell_limit, plan.sell_steps)
 
     # ---------------------------------------------------------------- piezas
     def _spread_ok(self, a, slot: Slot, tick) -> bool:
@@ -352,7 +357,8 @@ class Engine:
                "tendencia": st.trend, "M": round(st.att, 3), "capital": round(capital, 2),
                "idm": self.s.idm, "peso": round(a.weight, 4),
                "pos_media_lotes": round(slot.n_avg * spec.step, 4),
-               "pos_max_lotes": round(min(2 * slot.n_avg, slot.max_steps) * spec.step, 4)}
+               "pos_max_lotes": round(min(2 * slot.n_avg, slot.max_steps) * spec.step, 4),
+               "orden_lotes": round(s27.limit_order_steps(slot.n_avg, sp) * spec.step, 2)}
         self._record(self.daily_csv, row)
         log.info("estado diario %s", row)
         if slot.n_avg * 2 < 1:
@@ -361,7 +367,9 @@ class Engine:
                         every_s=24 * 3600)
         return True
 
-    def _sync_limit(self, a, magic: int, spec, tick, side: str, price: float | None) -> None:
+    def _sync_limit(self, a, magic: int, spec, tick, side: str, price: float | None,
+                    steps: int = 1) -> None:
+        lots = round(steps * spec.step, 2)
         orders = [o for o in self.b.pending_orders(a.symbol, magic) if o.side == side]
         if price is not None:
             valid = (price <= tick.ask - spec.stops_distance if side == "buy"
@@ -370,15 +378,15 @@ class Engine:
                 price = None
         keep = None
         for o in orders:
-            if keep is None and price is not None and abs(o.volume - spec.step) < 1e-9:
+            if keep is None and price is not None and abs(o.volume - lots) < 1e-9:
                 keep = o
             else:
                 self._action(a.key, f"cancelar {side}", f"#{o.ticket}", self.b.cancel(o, a.symbol))
         if price is None:
             return
         if keep is None:
-            ok = self.b.place_limit(a.symbol, side, spec.step, price, magic, a.strategy)
-            self._action(a.key, f"límite {side}", f"{spec.step} @ {price}", ok)
+            ok = self.b.place_limit(a.symbol, side, lots, price, magic, a.strategy)
+            self._action(a.key, f"límite {side}", f"{lots} @ {price}", ok)
         elif abs(keep.price - price) > spec.tick / 2:
             ok = self.b.modify_limit(keep, a.symbol, price)
             self._action(a.key, f"mover {side}", f"#{keep.ticket} {keep.price} -> {price}", ok)

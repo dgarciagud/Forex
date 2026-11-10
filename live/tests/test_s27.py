@@ -137,3 +137,36 @@ def test_config_rejects_bad_side(tmp_path):
                  'symbol = "EURUSD"\nsides = "up"\n')
     with pytest.raises(cfgmod.ConfigError):
         cfgmod.load(p)
+
+
+# ------------------------------------------------------------------ escalera con buffer (órdenes de q pasos)
+def test_limit_order_steps():
+    assert s27.limit_order_steps(2.0, {"buffer_fraction": 0.10}) == 1
+    assert s27.limit_order_steps(2.0, {"buffer_fraction": 1.0}) == 2
+    assert s27.limit_order_steps(0.4, {"buffer_fraction": 1.0}) == 1
+
+
+def test_limit_ladder_with_buffer():
+    st = state(trend=1)
+    params = {**PARAMS, "buffer_fraction": 1.0}
+    n_avg = 2.0                                           # q = 2 pasos, máx. 4
+    k = 20.0 * n_avg / (10 * st.sigma_p)
+    p = s27.plan_limit(st, n_avg, 10, pos=0, bid=0.9999, ask=1.0, tick=0.00001,
+                       sides="both", mode="normal", params=params)
+    assert p.buy_steps == 2 and p.buy_limit == pytest.approx(math.floor((1.0 - 2 / k) / 1e-5 + 1e-9) * 1e-5)
+    assert p.sell_limit is None
+    p = s27.plan_limit(st, n_avg, 10, pos=3, bid=0.996, ask=0.9961, tick=0.00001,
+                       sides="both", mode="normal", params=params)
+    assert p.buy_steps == 1                               # solo queda 1 paso hasta el tope
+    assert p.sell_steps == 2 and p.sell_limit == pytest.approx(math.ceil((1.0 - 1 / k) / 1e-5 - 1e-9) * 1e-5)
+
+
+def test_gap_with_buffer_moves_whole_levels():
+    st = state(trend=1)
+    params = {**PARAMS, "buffer_fraction": 1.0}
+    n_avg = 2.0
+    k = 20.0 * n_avg / (10 * st.sigma_p)
+    ask = 1.0 - 3.5 / k                                   # óptima 3.5: un nivel de 2 superado
+    p = s27.plan_limit(st, n_avg, 10, pos=0, bid=ask - 1e-5, ask=ask, tick=0.00001,
+                       sides="both", mode="normal", params=params)
+    assert p.market_steps == 2

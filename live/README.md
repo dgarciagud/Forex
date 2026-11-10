@@ -32,8 +32,9 @@ Qué estrategia opera en qué cruce, y con qué lados, se decide en [`config.tom
 2. **Posición óptima** al precio P: `N = (20 × M × (equilibrio − P) / σ_precio) / 10 × posición media`,
    con tope de ±2× la posición media y de `max_lots`. Solo se permite el lado que coincide con la
    tendencia **y** con `sides`; con `mode` se puede limitar a reducir o cerrar.
-3. **Ejecución `limit`** (la del libro): una compra límite de 1 paso (0,01 lotes) en el precio donde
-   la óptima es la posición actual +1, y una venta límite donde es −1. Cuando se llena una se
+3. **Ejecución `limit`**: una compra límite de q pasos en el precio donde la óptima es la posición
+   actual + q, y una venta límite donde es − q. q = `buffer_fraction` × posición media (mínimo 1
+   paso de 0,01 lotes, que es la escalera del libro). Con `buffer_fraction = 1.0` y 1.700 €, q = 2 pasos. Cuando se llena una se
    recolocan las dos. Si un nivel ya es ejecutable (salto de precio, nuevo día) se va a mercado
    hasta la óptima. Las reducciones obligadas (cambio de tendencia, lado prohibido, modo
    `close`) van a mercado.

@@ -32,7 +32,7 @@ DEFAULTS = {
     "trend_slow": 64,
     "vol_attenuation": True,
     "execution": "limit",        # "limit" (libro) | "market" (como el backtest del repo)
-    "buffer_fraction": 0.10,     # solo execution = "market"
+    "buffer_fraction": 0.10,     # market: buffer; limit: tamaño de orden (mín. 1 paso)
 }
 
 
@@ -116,25 +116,38 @@ def _ceil_tick(price: float, tick: float) -> float:
 @dataclass
 class Plan:
     market_steps: int = 0            # >0 comprar, <0 vender a mercado (0 = nada)
-    buy_limit: float | None = None   # precio de la compra límite de 1 paso
-    sell_limit: float | None = None  # precio de la venta límite de 1 paso
+    buy_limit: float | None = None   # precio de la compra límite
+    sell_limit: float | None = None  # precio de la venta límite
+    buy_steps: int = 1               # tamaño de la compra límite en pasos
+    sell_steps: int = 1              # tamaño de la venta límite en pasos
     lo: int = 0
     hi: int = 0
     optimal: float = 0.0             # posición óptima sin redondear al precio medio
     reason: str = ""
 
 
+def limit_order_steps(n_avg: float, params: dict) -> int:
+    """Tamaño de cada orden de la escalera en pasos: buffer_fraction x posición media (mín. 1).
+
+    Igual que el backtest del repo en modo límite: órdenes de q pasos, con niveles en los
+    precios donde la óptima = posición ± q. q = 1 es la escalera del libro.
+    """
+    p = {**DEFAULTS, **params}
+    return max(1, int(round(p["buffer_fraction"] * n_avg)))
+
+
 def plan_limit(st: DailyState, n_avg: float, max_steps: int, pos: int, bid: float, ask: float,
                tick: float, sides: str, mode: str, params: dict) -> Plan:
-    """Escalera del libro: compra límite donde la óptima = pos+1, venta donde = pos-1.
+    """Escalera: compra límite de q pasos donde la óptima = pos+q, venta donde = pos-q.
 
-    Si un nivel ya es ejecutable (salto de precio o nuevo día) se va a mercado hasta la
-    posición óptima redondeada hacia la actual. Las reducciones obligadas (filtro de
-    tendencia, lados, modo) van a mercado.
+    Si un nivel ya es ejecutable (salto de precio o nuevo día) se va a mercado por los
+    niveles ya superados. Las reducciones obligadas (filtro de tendencia, lados, modo) van
+    a mercado.
     """
     nmax = _nmax(n_avg, max_steps, params)
     lo, hi = bounds(st.trend, sides, mode, pos, nmax)
     k = _k(st, n_avg, params)
+    q = limit_order_steps(n_avg, params)
     mid = 0.5 * (bid + ask)
     opt = min(max(k * (st.eq - mid), lo), hi)
     plan = Plan(lo=lo, hi=hi, optimal=opt)
@@ -146,22 +159,24 @@ def plan_limit(st: DailyState, n_avg: float, max_steps: int, pos: int, bid: floa
     if k <= 0:
         return plan
 
-    if pos + 1 <= hi:
-        level = st.eq - (pos + 1) / k
+    if pos < hi:
+        size = min(q, hi - pos)
+        level = st.eq - (pos + size) / k
         if ask <= level:
-            target = min(hi, math.floor(k * (st.eq - ask)))
-            plan.market_steps = target - pos
+            n_levels = max(1, math.floor((k * (st.eq - ask) - pos) / q))
+            plan.market_steps = min(hi, pos + n_levels * q) - pos
             plan.reason = "nivel de compra ya ejecutable"
             return plan
-        plan.buy_limit = _floor_tick(level, tick)
-    if pos - 1 >= lo:
-        level = st.eq - (pos - 1) / k
+        plan.buy_limit, plan.buy_steps = _floor_tick(level, tick), size
+    if pos > lo:
+        size = min(q, pos - lo)
+        level = st.eq - (pos - size) / k
         if bid >= level:
-            target = max(lo, math.ceil(k * (st.eq - bid)))
-            plan.market_steps = target - pos
+            n_levels = max(1, math.floor((pos - k * (st.eq - bid)) / q))
+            plan.market_steps = max(lo, pos - n_levels * q) - pos
             plan.reason = "nivel de venta ya ejecutable"
             return plan
-        plan.sell_limit = _ceil_tick(level, tick)
+        plan.sell_limit, plan.sell_steps = _ceil_tick(level, tick), size
     return plan
 
 
