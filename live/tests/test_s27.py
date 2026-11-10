@@ -126,7 +126,7 @@ def test_n_avg_steps_eurchf_1900():
 # ------------------------------------------------------------------ configuración
 def test_config_example_loads():
     s = cfgmod.load(Path(__file__).resolve().parents[1] / "config.toml")
-    assert s.capital == 1900 and s.expect_server == "Darwinex-Demo" and s.idm == pytest.approx(1.70)
+    assert s.capital == 1700 and s.expect_server == "Darwinex-Demo" and s.idm == pytest.approx(1.70)
     assert {a.symbol for a in s.active()} == {"EURUSD", "USDJPY", "EURCHF", "USDCAD", "EURNOK"}
     assert sum(a.weight for a in s.active()) == pytest.approx(1.0)
 

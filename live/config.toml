@@ -9,7 +9,7 @@ log_dir = "logs"        # live.log, acciones.csv, estado_diario.csv
 stop_file = "STOP"      # si existe: cancela pendientes y no opera; si contiene "flat" además cierra posiciones
 
 [account]
-capital = 1900          # EUR asignados; se usa min(capital, equity). "equity" = todo el equity (interés compuesto)
+capital = 1700          # EUR asignados; se usa min(capital, equity). "equity" = todo el equity (interés compuesto)
 risk_target = 0.20      # tau anual (AFTS)
 idm = "auto"            # "auto" = tabla de AFTS según nº de cruces activos (5 -> 1.70), o un número
 

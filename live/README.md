@@ -42,8 +42,8 @@ Qué estrategia opera en qué cruce, y con qué lados, se decide en [`config.tom
 4. **Cuenta hedge**: las ventas cierran primero posiciones largas por ticket (y viceversa). Si una
    límite abre una posición contraria, se netea con `close_by`.
 
-Tamaño orientativo con 1.900 € y 5 cruces (IDM 1,70, peso 20 %, τ 20 %): posición media de
-**≈ 0,02 lotes** por cruce y máxima de ≈ 0,04. La granularidad de 0,01 lotes es gruesa: cada
+Tamaño orientativo con 1.700 € y 5 cruces (IDM 1,70, peso 20 %, τ 20 %): posición media de
+**≈ 0,015–0,025 lotes** por cruce y máxima de 0,02–0,05. La granularidad de 0,01 lotes es gruesa: cada
 nivel de la escalera es un 25–50 % de la posición media. El motor avisa si en algún cruce la
 posición máxima no llega a 0,01 lotes.
 
