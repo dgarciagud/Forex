@@ -77,6 +77,45 @@ def main():
         "Fuerza de la tendencia de fondo": bucket("tendencia", ["Débil", "Media", "Fuerte"], q=3),
         "Régimen de volatilidad": bucket("vol_q", ["Vol baja", "Vol media", "Vol alta"], bins=[0, 1/3, 2/3, 1]),
     }
+    # Desglose por par: rentabilidad media diaria del par anualizada (% capital del par = peso 25 %)
+    defs = {"Tipo de día": ("eficiencia", ["Ida y vuelta", "Mixto", "Direccional"], 3, None),
+            "Movimiento": ("movimiento", ["<0,5σ", "0,5–1σ", "1–2σ", ">2σ"], None, [0, 0.5, 1, 2, np.inf]),
+            "Tendencia": ("tendencia", ["Débil", "Media", "Fuerte"], 3, None),
+            "Volatilidad": ("vol_q", ["Baja", "Media", "Alta"], None, [0, 1/3, 2/3, 1])}
+    per_pair = {}
+    for k, (col, labels, q, bins) in defs.items():
+        parts = []
+        for p_, d in df.groupby("par"):
+            b = pd.qcut(d[col], q, labels=labels) if q else pd.cut(d[col], bins, labels=labels)
+            parts.append((d.groupby(b, observed=True)["pnl_pb"].mean() * 256 * len(PAIRS) / 100).rename(p_))
+        per_pair[k] = pd.concat(parts, axis=1).T.round(1)
+    with open(out / "regimenes_por_par.txt", "w") as f:
+        for k, t in per_pair.items():
+            f.write(f"== {k} (rentabilidad bruta anualizada, % si todo fuera así)\n{t.to_string()}\n\n")
+        yp = df.pivot_table(index=df.index.year, columns="par", values="pnl_pb", aggfunc="sum") / 100
+        f.write(f"== Por año y par (% del capital total, bruto)\n{yp.round(2).to_string()}\n")
+    print(open(out / "regimenes_por_par.txt").read())
+
+    fig2, axes2 = plt.subplots(1, 4, figsize=(17, 4.8), sharey=True)
+    cols = {"EURCHF": "#2a78d6", "EURNOK": "#eb6834", "USDCAD": "#1baf7a", "USDJPY": "#6250d6"}
+    for ax, (k, t) in zip(axes2, per_pair.items()):
+        x = np.arange(t.shape[1])
+        wdt = 0.8 / len(t)
+        for i, (p_, row) in enumerate(t.iterrows()):
+            ax.bar(x + (i - 1.5) * wdt, row.values, width=wdt * 0.9, color=cols[p_], label=p_)
+        ax.set_xticks(x, t.columns, fontsize=9)
+        ax.axhline(0, color=INK2, lw=0.8)
+        ax.set_title(k, fontsize=10.5, loc="left", color=INK)
+        ax.set_yscale("symlog", linthresh=50)
+        for s_ in ("top", "right"):
+            ax.spines[s_].set_visible(False)
+        ax.grid(axis="y", alpha=0.25)
+    axes2[0].set_ylabel("Rentabilidad bruta anualizada\n(% si todo fuera así; escala symlog)")
+    axes2[0].legend(fontsize=9, frameon=False)
+    fig2.suptitle("Estrategia 27 por par: ¿se mantiene el patrón?", x=0.01, ha="left", fontsize=12.5)
+    fig2.tight_layout()
+    fig2.savefig(out / "regimenes_por_par.png", dpi=120)
+
     yearly = (df.groupby(df.index.year)["pnl_pb"].sum() / 100).round(2).rename("ret_% (bruto, cartera)")
     with open(out / "regimenes.txt", "w") as f:
         for k, t in tables.items():
