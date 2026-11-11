@@ -1,4 +1,4 @@
-# Instalación / actualización del motor live en el VPS Windows (Darwinex MT5).
+﻿# Instalación / actualización del motor live en el VPS Windows (Darwinex MT5).
 #
 # Uso en PowerShell como administrador:
 #   iwr https://raw.githubusercontent.com/dgarciagud/Forex/ccr-cc40f003-7upz2d/live/install_vps.ps1 -OutFile $env:TEMP\install_vps.ps1
@@ -134,6 +134,6 @@ if ($Mode -eq "live") {
 }
 
 Step "Listo"
-Write-Host "Motor en marcha en modo:" ((Select-String -Path $Cfg -Pattern '^mode ').Line)
+Write-Host "Motor en marcha en modo:" ((Select-String -Path $Cfg -Pattern '^mode = "(live|dry_run)"').Line -replace '\s*#.*$', '')
 Write-Host "Registros: $Base\logs\live.log   |   Parar: crea el archivo $Base\STOP"
 Write-Host "Actualizar: vuelve a ejecutar este script (conserva config.toml, state y logs)."
