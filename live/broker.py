@@ -75,8 +75,11 @@ class MT5Broker:
             raise BrokerError("este sistema está pensado para una cuenta hedge")
         self.currency = acc.currency
         if self.expect_server and acc.server != self.expect_server:
-            raise BrokerError(f"el terminal está en el servidor {acc.server!r} y la configuración "
-                              f"exige {self.expect_server!r}: no se opera")
+            if not self.dry_run:
+                raise BrokerError(f"el terminal está en el servidor {acc.server!r} y la configuración "
+                                  f"exige {self.expect_server!r}: no se opera")
+            log.warning("servidor %r distinto del esperado %r: solo lectura (dry_run/status)",
+                        acc.server, self.expect_server)
         term = mt5.terminal_info()
         if not self.dry_run and (term is None or not term.trade_allowed):
             raise BrokerError("activa 'Algo Trading' en el terminal MT5")
