@@ -176,12 +176,19 @@ class Engine:
             self.disconnected += 1
             self.n.send("MT5 desconectado; reintentando la conexión", key="disconnected", every_s=900)
             if self.disconnected % 6 == 0:          # cada ~30 s: rehacer el enlace con el terminal
-                self.b.reconnect()
+                if not self.b.reconnect() and self.b.account_changed():
+                    self.n.send("PARADA: la reconexión encuentra otra cuenta en el terminal")
+                    raise SystemExit(3)
             return
         if self.disconnected:
             self.n.send(f"MT5 reconectado tras {self.disconnected} ciclos", key="reconnected", every_s=60)
             self.disconnected = 0
             return
+        changed = self.b.account_changed()
+        if changed:
+            # Nunca seguir con otra cuenta: salir y que el reinicio vuelva a validar el servidor
+            self.n.send(f"PARADA: {changed}. El motor se detiene sin tocar nada.")
+            raise SystemExit(3)
         stop = self._stop_state()
         if stop:
             self.n.send(f"archivo STOP activo ({stop})", key="stop", every_s=6 * 3600)

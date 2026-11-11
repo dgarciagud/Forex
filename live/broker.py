@@ -74,6 +74,7 @@ class MT5Broker:
         if acc.margin_mode != mt5.ACCOUNT_MARGIN_MODE_RETAIL_HEDGING:
             raise BrokerError("este sistema está pensado para una cuenta hedge")
         self.currency = acc.currency
+        self.login, self.server = acc.login, acc.server
         if self.expect_server and acc.server != self.expect_server:
             if not self.dry_run:
                 raise BrokerError(f"el terminal está en el servidor {acc.server!r} y la configuración "
@@ -88,14 +89,33 @@ class MT5Broker:
                  "dry_run" if self.dry_run else "LIVE")
 
     def reconnect(self) -> bool:
-        """Rehace el enlace con el terminal (se rompe, p. ej., tras suspender el PC)."""
+        """Rehace el enlace con el terminal (se rompe, p. ej., tras suspender el PC).
+
+        Solo se acepta si el terminal sigue en la MISMA cuenta con la que arrancó el motor.
+        """
+        original = (self.login, self.server)
         try:
             self.mt5.shutdown()
             self.connect()
-            return True
         except Exception as exc:  # noqa: BLE001
             log.warning("reconexión fallida: %s", exc)
+            self.login, self.server = original
             return False
+        if (self.login, self.server) != original:
+            log.error("reconexión con otra cuenta (%s, %s); se rechaza", self.login, self.server)
+            self.login, self.server = original
+            return False
+        return True
+
+    def account_changed(self) -> str | None:
+        """Motivo si el terminal ya no está en la cuenta con la que arrancó el motor."""
+        acc = self.mt5.account_info()
+        if acc is None:
+            return None                      # desconexión: la gestiona el bucle de reconexión
+        if acc.login != self.login or acc.server != self.server:
+            return (f"el terminal ha cambiado de la cuenta {self.login} ({self.server}) "
+                    f"a {acc.login} ({acc.server})")
+        return None
 
     def shutdown(self) -> None:
         self.mt5.shutdown()

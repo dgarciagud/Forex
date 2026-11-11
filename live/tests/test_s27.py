@@ -231,3 +231,34 @@ def test_overlay_scales_down_and_quantizes():
     corr = np.ones((5, 5))                                # correlación total: manda el riesgo
     res = ro.compute(np.full(5, 1.5), np.full(5, 0.07), np.full(5, 0.14), corr, ro.OverlayLimits())
     assert res.binding in ("riesgo", "correlación") and res.multiplier < 1
+
+
+# ------------------------------------------------------------------ cambio de cuenta en el terminal
+class _FakeMT5:
+    def __init__(self, login, server):
+        self.acc = type("A", (), {"login": login, "server": server})()
+
+    def account_info(self):
+        return self.acc
+
+
+def test_account_change_is_detected():
+    from live.broker import MT5Broker
+    b = MT5Broker.__new__(MT5Broker)
+    b.mt5, b.login, b.server = _FakeMT5(3000107269, "Darwinex-Demo"), 3000107269, "Darwinex-Demo"
+    assert b.account_changed() is None
+    b.mt5 = _FakeMT5(4000010737, "Darwinex-Live")
+    assert "4000010737" in b.account_changed()
+
+
+def test_engine_exits_when_account_changes(tmp_path):
+    from types import SimpleNamespace
+    from live.engine import Engine
+    s = cfgmod.load(Path(__file__).resolve().parents[1] / "config.toml")
+    s.state_dir, s.log_dir = tmp_path / "state", tmp_path / "logs"
+    s.log_dir.mkdir()
+    broker = SimpleNamespace(dry_run=False, connected=lambda: True,
+                             account_changed=lambda: "el terminal ha cambiado de cuenta")
+    eng = Engine(s, broker)
+    with pytest.raises(SystemExit):
+        eng.cycle()
