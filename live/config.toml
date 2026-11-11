@@ -27,6 +27,16 @@ min_history_days = 500      # velas D1 mínimas (la vol usa media de 10 años y 
 blackout_start = "23:45"    # hora del SERVIDOR (Darwinex GMT+2/+3: medianoche = cierre de NY).
 blackout_end = "01:00"      # en la ventana se cancelan las pendientes y no se opera (spreads de rollover)
 
+[risk_overlay]          # AFTS táctica 4: multiplicador <= 1 sobre TODAS las posiciones si el riesgo se dispara
+enabled = true
+max_risk = 0.35         # riesgo anual esperado de la cartera (vol actual y correlaciones de 2 años)
+max_jump_risk = 1.10    # el mismo con cada vol en su percentil 99 histórico
+max_corr_shock = 0.60   # suma de riesgos como si todas las correlaciones fueran +-1
+max_leverage = 10.0     # nominal total / capital
+corr_days = 500
+quantum = 0.05          # el multiplicador se redondea hacia abajo a múltiplos de 0.05
+# Máximos = percentil 99 del backtest S27 2010-2025 con los 5 pares (IDM 1.70): 0.35 / 1.10 / 0.58 / 9.5
+
 [mt5]
 path = ""               # ruta a terminal64.exe si hay varios terminales; vacío = el que está abierto
 expect_server = "Darwinex-Demo"  # se niega a operar si el terminal está en otro servidor (cuenta real: cambiarlo a mano)

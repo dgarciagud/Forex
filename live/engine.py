@@ -27,7 +27,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 from live import config as cfgmod
+from live import risk_overlay
 from live.strategies import s27
 
 log = logging.getLogger("live.engine")
@@ -78,6 +82,12 @@ class Slot:
     gap_cycles: int = 0  # ciclos seguidos con un nivel ya ejecutable
     ref_spread: float | None = None      # spread mediano de horas líquidas (referencia)
     blocked_since: float | None = None   # desde cuándo se aplaza una orden a mercado
+    vol_ann: float = 0.0                 # vol anual actual (overlay)
+    vol_jump: float = 0.0                # vol anual en su percentil 99 histórico (overlay)
+    returns: object = None               # rendimientos diarios recientes (correlaciones)
+    vpu: float = 0.0                     # EUR por unidad de precio y lote
+    mid: float = 0.0
+    opt_unscaled: float | None = None    # posición óptima sin overlay, en pasos
 
 
 class Locks:
@@ -117,6 +127,11 @@ class Engine:
         self.locks = Locks(settings.state_dir / "locks.json")
         self.slots: dict[str, Slot] = {a.key: Slot() for a in settings.assignments}
         self.disconnected = 0
+        self.capital: float | None = None
+        self.overlay_m = 1.0
+        self.overlay: risk_overlay.OverlayResult | None = None
+        self._overlay_logged = 0.0
+        self.overlay_csv = settings.log_dir / "riesgo.csv"
         self.magics = {v["magic"] for v in settings.strategies.values()}
         self.actions_csv = settings.log_dir / "acciones.csv"
         self.daily_csv = settings.log_dir / "estado_diario.csv"
@@ -170,6 +185,12 @@ class Engine:
         stop = self._stop_state()
         if stop:
             self.n.send(f"archivo STOP activo ({stop})", key="stop", every_s=6 * 3600)
+        if self.s.overlay_enabled:
+            try:
+                self._update_overlay()
+            except Exception as exc:  # noqa: BLE001
+                log.exception("error en el risk overlay")
+                self.n.send(f"error en el risk overlay: {exc}", key="err:overlay")
         for a in self.s.active():
             try:
                 self._run(a, stop, trade)
@@ -236,14 +257,19 @@ class Engine:
             return
 
         # --- 4. plan
+        # Posición óptima sin overlay (entrada del risk overlay) y posición media escalada
+        slot.mid = 0.5 * (tick.bid + tick.ask)
+        slot.opt_unscaled = s27.plan_limit(st, slot.n_avg, slot.max_steps, pos, tick.bid, tick.ask,
+                                           spec.tick, a.sides, a.mode, sp).optimal
+        n_avg = slot.n_avg * (self.overlay_m if self.s.overlay_enabled else 1.0)
         if sp.get("execution", "limit") == "market":
             h1 = self.b.last_bar_time(a.symbol, "H1")
             new_bar = slot.last_h1 is not None and h1 != slot.last_h1
             slot.last_h1 = h1
-            plan = s27.plan_market(st, slot.n_avg, slot.max_steps, pos, tick.bid, tick.ask,
+            plan = s27.plan_market(st, n_avg, slot.max_steps, pos, tick.bid, tick.ask,
                                    a.sides, a.mode, sp, new_bar)
         else:
-            plan = s27.plan_limit(st, slot.n_avg, slot.max_steps, pos, tick.bid, tick.ask,
+            plan = s27.plan_limit(st, n_avg, slot.max_steps, pos, tick.bid, tick.ask,
                                   spec.tick, a.sides, a.mode, sp)
         if not trade:
             log.info("%s bid=%s ask=%s pos=%d rango=[%d,%d] óptima=%.2f compra=%s venta=%s mercado=%d %s",
@@ -281,6 +307,40 @@ class Engine:
         self._sync_limit(a, magic, spec, tick, "sell", plan.sell_limit, plan.sell_steps)
 
     # ---------------------------------------------------------------- piezas
+    def _update_overlay(self) -> None:
+        """Recalcula el multiplicador M del risk overlay con las posiciones óptimas sin escalar."""
+        rows = [(a, self.slots[a.key]) for a in self.s.active()]
+        rows = [(a, sl) for a, sl in rows if sl.daily is not None and sl.opt_unscaled is not None
+                and sl.vpu > 0 and sl.returns is not None]
+        if not rows or not self.capital:
+            return
+        step = {a.key: self.b.spec(a.symbol).step for a, _ in rows}
+        w = np.array([sl.opt_unscaled * step[a.key] * sl.vpu * sl.mid / self.capital for a, sl in rows])
+        vol = np.array([sl.vol_ann for _, sl in rows])
+        jump = np.array([sl.vol_jump for _, sl in rows])
+        rets = pd.concat({a.key: sl.returns for a, sl in rows}, axis=1).dropna().tail(self.s.corr_days)
+        corr = rets.corr().values if len(rets) > 60 else np.eye(len(rows))
+        res = risk_overlay.compute(w, vol, jump, corr, self.s.overlay)
+        changed = abs(res.multiplier - self.overlay_m) > 1e-9
+        self.overlay_m, self.overlay = res.multiplier, res
+        now = time.time()
+        if changed or now - self._overlay_logged > 3600:
+            self._overlay_logged = now
+            self._record(self.overlay_csv, {
+                "utc": f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S}", "multiplicador": res.multiplier,
+                "limita": res.binding, "riesgo": round(res.risk, 4), "saltos": round(res.jump_risk, 4),
+                "correlacion": round(res.corr_shock, 4), "apalancamiento": round(res.leverage, 3),
+                **{f"w_{a.symbol}": round(x, 4) for (a, _), x in zip(rows, w)}})
+        if changed:
+            msg = (f"risk overlay: multiplicador {res.multiplier:.2f}"
+                   + (f" (limita {res.binding})" if res.binding else " (sin límite activo)")
+                   + f"; riesgo {res.risk:.0%}, saltos {res.jump_risk:.0%}, "
+                     f"correlación {res.corr_shock:.0%}, apalancamiento {res.leverage:.1f}x")
+            if res.multiplier < 1:
+                self.n.send(msg, key="overlay", every_s=600)
+            else:
+                log.info(msg)
+
     def _market_allowed(self, a, slot: Slot, tick, server: datetime, plan) -> bool:
         """¿Se puede enviar ya la orden a mercado o conviene esperar?
 
@@ -374,6 +434,12 @@ class Engine:
                                      self.s.risk_target, st.sigma_p, vpu, spec.step)
         slot.max_steps = int(min(a.max_lots, spec.volume_max) / spec.step + 1e-9)
         slot.daily = st
+        vol_hist = s27.carver_vol(closes.pct_change()) * 16
+        slot.vol_ann = float(vol_hist.iloc[-1])
+        slot.vol_jump = float(vol_hist.quantile(0.99))
+        slot.returns = closes.pct_change().tail(self.s.corr_days + 10)
+        slot.vpu = vpu
+        self.capital = capital
         try:
             slot.ref_spread = self.b.reference_spread(a.symbol, *self.s.liquid_hours,
                                                       self.s.reference_days)
@@ -463,6 +529,14 @@ def main() -> None:
     try:
         if args.status or args.once:
             engine.cycle(trade=not args.status)
+            if settings.overlay_enabled:
+                engine._update_overlay()
+                r = engine.overlay
+                if r is not None:
+                    log.info("risk overlay: multiplicador %.2f %s| riesgo %.1f%%, saltos %.1f%%, "
+                             "correlación %.1f%%, apalancamiento %.2fx", r.multiplier,
+                             f"(limita {r.binding}) " if r.binding else "", 100 * r.risk,
+                             100 * r.jump_risk, 100 * r.corr_shock, r.leverage)
             return
         while True:
             start = time.time()

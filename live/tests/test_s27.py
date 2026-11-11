@@ -208,3 +208,26 @@ def test_forced_reduction_waits_but_not_forever(tmp_path):
     old = Slot(ref_spread=0.0009, blocked_since=time.time() - 11 * 3600)
     assert eng._market_allowed(nok, old, wide, night, forced)        # tras 10 h se ejecuta
     assert eng._market_allowed(nok, Slot(ref_spread=0.0009), NS(bid=10.5, ask=10.5009), night, forced)
+
+
+# ------------------------------------------------------------------ risk overlay
+def test_overlay_inactive_with_normal_risk():
+    from live import risk_overlay as ro
+    w = np.array([0.5, -0.5, 0.5, 0.5, -0.5])
+    vol = np.full(5, 0.07)
+    res = ro.compute(w, vol, vol * 2.5, np.eye(5), ro.OverlayLimits())
+    assert res.multiplier == 1.0 and res.binding == ""
+    assert res.risk == pytest.approx(np.sqrt(5) * 0.5 * 0.07)
+    assert res.corr_shock == pytest.approx(5 * 0.5 * 0.07)
+
+
+def test_overlay_scales_down_and_quantizes():
+    from live import risk_overlay as ro
+    w = np.array([3.0, 3.0, 3.0, 3.0, 3.0])               # 15x de apalancamiento
+    vol = np.full(5, 0.02)                                # vol baja: solo limita el apalancamiento
+    res = ro.compute(w, vol, vol * 2, np.eye(5), ro.OverlayLimits())
+    assert res.binding == "apalancamiento"
+    assert res.multiplier == pytest.approx(0.65)          # 10/15 = 0.667 -> 0.65
+    corr = np.ones((5, 5))                                # correlación total: manda el riesgo
+    res = ro.compute(np.full(5, 1.5), np.full(5, 0.07), np.full(5, 0.14), corr, ro.OverlayLimits())
+    assert res.binding in ("riesgo", "correlación") and res.multiplier < 1

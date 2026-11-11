@@ -5,6 +5,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from live.risk_overlay import OverlayLimits
+
 SIDES = {"both", "long", "short", "none"}
 MODES = {"normal", "reduce_only", "close"}
 RUN_MODES = {"dry_run", "live"}
@@ -69,6 +71,9 @@ class Settings:
     liquid_hours: tuple[str, str]   # horas cuyo spread mediano sirve de referencia
     reference_days: int             # días de ticks para el spread de referencia
     max_forced_wait_hours: float    # espera máxima de una reducción obligatoria por spread
+    overlay_enabled: bool           # risk overlay de AFTS (táctica 4)
+    overlay: OverlayLimits
+    corr_days: int                  # días de rendimientos para las correlaciones del overlay
     strategies: dict[str, dict] = field(default_factory=dict)
     assignments: list[Assignment] = field(default_factory=list)
 
@@ -101,6 +106,7 @@ def load(path: str | Path) -> Settings:
         raw = tomllib.load(fh)
     base = path.parent
     gen, acc, saf = raw.get("general", {}), raw.get("account", {}), raw.get("safety", {})
+    ro = raw.get("risk_overlay", {})
 
     run_mode = gen.get("mode", "dry_run")
     if run_mode not in RUN_MODES:
@@ -181,6 +187,14 @@ def load(path: str | Path) -> Settings:
         liquid_hours=_window(saf.get("liquid_hours", ["10:00", "18:00"]), "liquid_hours"),
         reference_days=int(saf.get("reference_days", 5)),
         max_forced_wait_hours=float(saf.get("max_forced_wait_hours", 10)),
+        overlay_enabled=bool(ro.get("enabled", True)),
+        overlay=OverlayLimits(
+            max_risk=float(ro.get("max_risk", 0.35)),
+            max_jump_risk=float(ro.get("max_jump_risk", 1.10)),
+            max_corr_shock=float(ro.get("max_corr_shock", 0.60)),
+            max_leverage=float(ro.get("max_leverage", 10.0)),
+            quantum=float(ro.get("quantum", 0.05))),
+        corr_days=int(ro.get("corr_days", 500)),
         strategies=strategies,
         assignments=assignments,
     )
