@@ -32,7 +32,8 @@ Supuestos de simulación (ver README):
   * Ejecución al cierre de cada barra horaria (sin look-ahead: la posición
     nueva empieza a ganar/perder desde la barra siguiente).
   * Coste por unidad negociada configurable (por defecto medio spread típico).
-  * P&L en divisa cotizada convertido a USD con el cierre diario. Sin swaps.
+  * P&L en divisa cotizada convertido a USD con el cierre diario. Swaps y comisión
+    opcionales (Config.swaps, Config.commission; por defecto desactivados).
 """
 from __future__ import annotations
 
@@ -45,6 +46,18 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
+
+# Swaps de Darwinex (cuenta demo, 10-11-2026): puntos por unidad y noche para largo y corto,
+# tamaño de punto y día de la semana del swap triple (pandas: lunes = 0). Son los de HOY:
+# los tipos de interés (y por tanto los swaps) han cambiado mucho entre 2010 y 2025.
+SWAPS = {
+    "EURCHF": (3.8, -9.5, 1e-5, 2),
+    "EURNOK": (-102.5, 11.6, 1e-5, 2),
+    "USDCAD": (0.0, 0.0, 1e-5, 3),
+    "USDJPY": (6.4, -16.2, 1e-3, 2),
+    "EURUSD": (-7.9, 0.8, 1e-5, 2),
+}
+COMMISSION_DARWINEX = 0.000025   # ~0,0025 % del nominal por lado (observado en la demo)
 
 # Medio spread típico (en precio) que se cobra en cada lote negociado.
 HALF_SPREAD = {
@@ -76,6 +89,9 @@ class Config:
     limit_pen_mult: float = 1.0       # penetración exigida a la límite, en medios spreads
     buffer_frac: float = 0.10         # buffer = fracción de la posición con forecast 10 (mín. 1 lote)
     day_end_hour_utc: int = 21
+    commission: float = 0.0           # fracción del nominal por lado (COMMISSION_DARWINEX)
+    swaps: bool = False               # cobrar/pagar swaps de SWAPS en cada rollover
+    sides: dict = field(default_factory=dict)  # par -> "both" | "long" | "short" | "none"
     weights: dict = field(default_factory=dict)
 
 
@@ -193,6 +209,11 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
                     hi_b = 0.0
                 else:
                     lo_b = hi_b = 0.0
+            side = cfg.sides.get(pair, "both")           # lados permitidos (como live/config.toml)
+            if side in ("long", "none"):
+                lo_b = max(lo_b, 0.0)
+            if side in ("short", "none"):
+                hi_b = min(hi_b, 0.0)
             A = max(A, 1e-12)
 
             # posición óptima evaluada al cierre horario, limitada por el filtro
@@ -290,9 +311,23 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
         fills_out[i] = nfills
         prev_c = c[i]
 
-    res = pd.DataFrame({"pnl_q": pnl_q, "cost_q": cost_q, "pos_lots": pos_out,
+    # Comisión por lote negociado, en divisa cotizada (nominal = unidades x precio)
+    comm_q = fills_out * lot * c * cfg.commission
+    # Swaps: se aplican a la posición que queda abierta al cierre de cada día FX
+    swap_q = np.zeros(n)
+    if cfg.swaps and pair in SWAPS:
+        long_pts, short_pts, point, triple = SWAPS[pair]
+        day_arr = np.asarray(days)
+        last_bar = np.r_[day_arr[1:] != day_arr[:-1], True]
+        nights = np.where(pd.DatetimeIndex(days).dayofweek == triple, 3, 1)
+        units = pos_out * lot
+        per_unit = np.where(units > 0, long_pts, short_pts) * point
+        swap_q = np.where(last_bar, np.abs(units) * per_unit * nights, 0.0)
+    res = pd.DataFrame({"pnl_q": pnl_q + swap_q, "cost_q": cost_q + comm_q, "pos_lots": pos_out,
                         "fills": fills_out, "day": days}, index=h.index)
     res["fxq"] = qpu_a
+    res["swap_usd"] = swap_q / res.fxq
+    res["comm_usd"] = comm_q / res.fxq
     res["pnl_usd"] = (res.pnl_q - res.cost_q) / res.fxq
     res["gross_usd"] = res.pnl_q / res.fxq
     res["cost_usd"] = res.cost_q / res.fxq

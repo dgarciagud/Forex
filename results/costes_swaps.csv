@@ -1,0 +1,25 @@
+ejecución,buffer,costes,lados,sharpe,ret_anual_%,vol_anual_%,spread+comisión_%,comisión_%,swaps_%,SR EURCHF,SR EURNOK,SR USDCAD,SR USDJPY
+"límite, atravesar ½ spread",0.5,spread,ambos lados,-0.0,-0.1,17.0,3.75,0.0,0.0,0.63,0.57,-0.7,-0.51
+"límite, atravesar ½ spread",0.5,+comisión,ambos lados,-0.41,-6.9,16.9,10.6,6.85,0.0,0.29,0.38,-0.92,-0.67
+"límite, atravesar ½ spread",0.5,+comisión+swaps,ambos lados,-0.6,-10.1,17.0,10.6,6.85,-3.19,0.11,0.26,-0.92,-0.77
+"límite, atravesar ½ spread",0.5,+comisión+swaps,sin lado de swap caro,-0.6,-8.0,13.4,6.28,4.15,1.29,0.21,0.01,-0.92,-0.35
+"límite, atravesar ½ spread",1.0,spread,ambos lados,0.24,4.0,17.1,1.61,0.0,0.0,0.69,0.62,-0.5,-0.31
+"límite, atravesar ½ spread",1.0,+comisión,ambos lados,-0.01,-0.1,17.1,5.77,4.16,0.0,0.5,0.51,-0.64,-0.41
+"límite, atravesar ½ spread",1.0,+comisión+swaps,ambos lados,-0.19,-3.2,17.1,5.77,4.16,-3.13,0.32,0.39,-0.64,-0.51
+"límite, atravesar ½ spread",1.0,+comisión+swaps,sin lado de swap caro,-0.28,-3.8,13.5,3.39,2.51,1.28,0.25,0.16,-0.64,-0.19
+"límite, atravesar ½ spread",1.5,spread,ambos lados,0.29,5.2,17.6,1.14,0.0,0.0,0.66,0.66,-0.43,-0.27
+"límite, atravesar ½ spread",1.5,+comisión,ambos lados,0.11,1.9,17.5,4.4,3.26,0.0,0.51,0.58,-0.54,-0.35
+"límite, atravesar ½ spread",1.5,+comisión+swaps,ambos lados,-0.06,-1.1,17.6,4.4,3.26,-3.04,0.35,0.46,-0.54,-0.44
+"límite, atravesar ½ spread",1.5,+comisión+swaps,sin lado de swap caro,-0.17,-2.4,13.8,2.62,1.98,1.27,0.3,0.2,-0.54,-0.16
+"mercado, medio spread",0.5,spread,ambos lados,-0.02,-0.3,15.8,4.47,0.0,0.0,0.09,-0.42,-0.08,0.36
+"mercado, medio spread",0.5,+comisión,ambos lados,-0.11,-1.7,15.8,5.85,1.38,0.0,0.03,-0.46,-0.13,0.32
+"mercado, medio spread",0.5,+comisión+swaps,ambos lados,-0.37,-5.8,15.8,5.85,1.38,-4.1,-0.17,-0.64,-0.13,0.17
+"mercado, medio spread",0.5,+comisión+swaps,sin lado de swap caro,-0.18,-2.4,13.4,3.44,0.83,2.57,-0.31,-0.39,-0.13,0.48
+"mercado, medio spread",1.0,spread,ambos lados,0.16,3.0,19.4,0.54,0.0,0.0,0.14,-0.24,-0.09,0.47
+"mercado, medio spread",1.0,+comisión,ambos lados,0.15,2.9,19.4,0.7,0.17,0.0,0.14,-0.24,-0.1,0.46
+"mercado, medio spread",1.0,+comisión+swaps,ambos lados,-0.11,-2.0,19.4,0.7,0.17,-4.89,-0.02,-0.45,-0.1,0.31
+"mercado, medio spread",1.0,+comisión+swaps,sin lado de swap caro,-0.1,-1.8,17.5,0.23,0.06,3.85,-0.31,-0.27,-0.1,0.63
+"mercado, medio spread",1.5,spread,ambos lados,0.23,2.7,11.6,0.23,0.0,0.0,0.16,-0.14,-0.1,0.52
+"mercado, medio spread",1.5,+comisión,ambos lados,0.22,2.6,11.6,0.3,0.07,0.0,0.15,-0.15,-0.11,0.52
+"mercado, medio spread",1.5,+comisión+swaps,ambos lados,-0.02,-0.2,11.6,0.3,0.07,-2.81,-0.01,-0.35,-0.11,0.39
+"mercado, medio spread",1.5,+comisión+swaps,sin lado de swap caro,-0.08,-0.9,12.1,0.06,0.02,2.75,-0.32,-0.25,-0.11,0.55
