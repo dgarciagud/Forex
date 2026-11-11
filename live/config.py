@@ -37,6 +37,7 @@ class Assignment:
     size_mult: float = 1.0       # multiplicador manual de tamaño (0-1 para reducir)
     max_lots: float = 0.10       # tope duro de posición en lotes
     enabled: bool = True
+    market_hours: list | None = None  # ["HH:MM", "HH:MM"] servidor; None = el de [safety]
 
     @property
     def key(self) -> str:
@@ -64,6 +65,10 @@ class Settings:
     mt5_path: str | None
     expect_server: str | None
     max_spread_mult: float
+    market_hours: tuple[str, str]   # horario para órdenes a mercado no urgentes (servidor)
+    liquid_hours: tuple[str, str]   # horas cuyo spread mediano sirve de referencia
+    reference_days: int             # días de ticks para el spread de referencia
+    max_forced_wait_hours: float    # espera máxima de una reducción obligatoria por spread
     strategies: dict[str, dict] = field(default_factory=dict)
     assignments: list[Assignment] = field(default_factory=list)
 
@@ -82,6 +87,12 @@ def _hhmm(value: str, name: str) -> str:
     except Exception as exc:  # noqa: BLE001
         raise ConfigError(f"{name} debe ser 'HH:MM', no {value!r}") from exc
     return value
+
+
+def _window(value, name: str) -> tuple[str, str]:
+    if not isinstance(value, list) or len(value) != 2:
+        raise ConfigError(f"{name} debe ser [\"HH:MM\", \"HH:MM\"]")
+    return _hhmm(value[0], name), _hhmm(value[1], name)
 
 
 def load(path: str | Path) -> Settings:
@@ -118,6 +129,10 @@ def load(path: str | Path) -> Settings:
             raise ConfigError(f"{a.key}: mode debe ser uno de {sorted(MODES)}")
         if a.key in seen:
             raise ConfigError(f"{a.key} está repetido")
+        if a.market_hours is not None:
+            if len(a.market_hours) != 2:
+                raise ConfigError(f"{a.key}: market_hours debe ser [\"HH:MM\", \"HH:MM\"]")
+            a.market_hours = [_hhmm(h, f"{a.key}.market_hours") for h in a.market_hours]
         if a.max_lots <= 0 or a.size_mult < 0:
             raise ConfigError(f"{a.key}: max_lots debe ser > 0 y size_mult >= 0")
         seen.add(a.key)
@@ -158,10 +173,14 @@ def load(path: str | Path) -> Settings:
         deviation_points=int(saf.get("deviation_points", 20)),
         min_history_days=int(saf.get("min_history_days", 500)),
         blackout_start=_hhmm(saf.get("blackout_start", "23:45"), "blackout_start"),
-        blackout_end=_hhmm(saf.get("blackout_end", "00:20"), "blackout_end"),
+        blackout_end=_hhmm(saf.get("blackout_end", "01:00"), "blackout_end"),
         mt5_path=mt5_path,
         expect_server=expect_server,
         max_spread_mult=float(saf.get("max_spread_mult", 3.0)),
+        market_hours=_window(saf.get("market_hours", ["01:00", "23:45"]), "market_hours"),
+        liquid_hours=_window(saf.get("liquid_hours", ["10:00", "18:00"]), "liquid_hours"),
+        reference_days=int(saf.get("reference_days", 5)),
+        max_forced_wait_hours=float(saf.get("max_forced_wait_hours", 10)),
         strategies=strategies,
         assignments=assignments,
     )

@@ -155,6 +155,19 @@ class MT5Broker:
         rates = self.mt5.copy_rates_from_pos(symbol, tf, 0, 1)
         return int(rates[0]["time"]) if rates is not None and len(rates) else None
 
+    def reference_spread(self, symbol: str, start: str, end: str, days: int) -> float | None:
+        """Spread mediano de los últimos `days` días en la franja líquida [start, end) (hora servidor)."""
+        now = datetime.now()
+        ticks = self.mt5.copy_ticks_range(symbol, now - timedelta(days=days + 3), now + timedelta(days=1),
+                                          self.mt5.COPY_TICKS_INFO)
+        if ticks is None or len(ticks) == 0:
+            return None
+        df = pd.DataFrame(ticks)
+        hhmm = pd.to_datetime(df["time"], unit="s").dt.strftime("%H:%M")
+        keep = (hhmm >= start) & (hhmm < end) if start <= end else (hhmm >= start) | (hhmm < end)
+        spread = (df["ask"] - df["bid"])[keep & (df["ask"] > df["bid"])]
+        return float(spread.median()) if len(spread) > 100 else None
+
     def value_per_unit_lot(self, symbol: str, price: float) -> float:
         """Ganancia (divisa de la cuenta) de 1 lote largo cuando el precio sube 1 unidad."""
         delta = price * 0.001

@@ -18,10 +18,14 @@ max_trades_per_day = 30     # por asignación; si se supera, se bloquea
 spike_sigma = 8.0           # cierre diario que se mueve > N desviaciones -> bloqueo hasta aprobar
 max_tick_age_seconds = 120  # sin ticks nuevos durante este tiempo -> no se opera (fin de semana, caída)
 deviation_points = 20       # deslizamiento máximo de las órdenes a mercado
-max_spread_mult = 3.0       # no ir a mercado si el spread > N veces su mediana de la última hora
+max_spread_mult = 3.0       # no ir a mercado si el spread > N × el spread de referencia
+liquid_hours = ["10:00", "18:00"]  # referencia = spread mediano de estas horas (Londres/NY), hora servidor
+reference_days = 5          # días de ticks para calcular la referencia (se recalcula cada día)
+market_hours = ["01:00", "23:45"]  # horario para órdenes a mercado NO urgentes (nivel ya ejecutable)
+max_forced_wait_hours = 10  # una reducción obligatoria espera spread normal como mucho estas horas
 min_history_days = 500      # velas D1 mínimas (la vol usa media de 10 años y percentil histórico)
 blackout_start = "23:45"    # hora del SERVIDOR (Darwinex GMT+2/+3: medianoche = cierre de NY).
-blackout_end = "00:20"      # en la ventana se cancelan las pendientes y no se opera (spreads de rollover)
+blackout_end = "01:00"      # en la ventana se cancelan las pendientes y no se opera (spreads de rollover)
 
 [mt5]
 path = ""               # ruta a terminal64.exe si hay varios terminales; vacío = el que está abierto
@@ -45,6 +49,7 @@ buffer_fraction = 1.0   # limit: cada orden = esta fracción de la posición med
 #   mode:  "normal" | "reduce_only" (solo reducir) | "close" (cerrar y no abrir)
 #   weight: peso de instrumento (si se omite en todas, reparto igual entre las activas)
 #   size_mult: multiplicador manual de tamaño; max_lots: tope duro de posición
+#   market_hours: ["HH:MM", "HH:MM"] propio del par (si no, el de [safety])
 #   enabled: false para desactivar sin borrar (las posiciones abiertas quedan sin gestionar)
 
 [[assignment]]
@@ -85,4 +90,5 @@ symbol = "EURNOK"
 sides = "both"
 mode = "normal"
 max_lots = 0.10
+market_hours = ["10:00", "22:00"]   # de madrugada su spread es 2-7 veces el de Londres
 enabled = true

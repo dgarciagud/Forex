@@ -170,3 +170,41 @@ def test_gap_with_buffer_moves_whole_levels():
     p = s27.plan_limit(st, n_avg, 10, pos=0, bid=ask - 1e-5, ask=ask, tick=0.00001,
                        sides="both", mode="normal", params=params)
     assert p.market_steps == 2
+
+
+# ------------------------------------------------------------------ cuándo se permite ir a mercado
+def _engine(tmp_path):
+    import time
+    from datetime import datetime
+    from types import SimpleNamespace
+    from live.engine import Engine, Slot
+
+    s = cfgmod.load(Path(__file__).resolve().parents[1] / "config.toml")
+    s.state_dir, s.log_dir = tmp_path / "state", tmp_path / "logs"
+    s.log_dir.mkdir()
+    eng = Engine(s, broker=SimpleNamespace(dry_run=True))
+    nok = next(a for a in s.active() if a.symbol == "EURNOK")
+    eur = next(a for a in s.active() if a.symbol == "EURUSD")
+    return eng, nok, eur, Slot, SimpleNamespace, datetime, time
+
+
+def test_market_hours_and_spread(tmp_path):
+    eng, nok, eur, Slot, NS, datetime, time = _engine(tmp_path)
+    gap = s27.Plan(market_steps=1, reason="nivel de compra ya ejecutable")
+    night, day = datetime(2026, 11, 11, 3, 0), datetime(2026, 11, 11, 12, 0)
+    slot = Slot(ref_spread=0.0009)
+    assert not eng._market_allowed(nok, slot, NS(bid=10.5, ask=10.5025), night, gap)  # EURNOK de madrugada
+    assert eng._market_allowed(nok, Slot(ref_spread=0.0009), NS(bid=10.5, ask=10.5009), day, gap)
+    assert not eng._market_allowed(nok, Slot(ref_spread=0.0009), NS(bid=10.5, ask=10.5040), day, gap)
+    assert eng._market_allowed(eur, Slot(ref_spread=0.00003), NS(bid=1.1, ask=1.10004), night, gap)
+
+
+def test_forced_reduction_waits_but_not_forever(tmp_path):
+    eng, nok, eur, Slot, NS, datetime, time = _engine(tmp_path)
+    forced = s27.Plan(market_steps=-2, reason="fuera de rango permitido")
+    night = datetime(2026, 11, 11, 3, 0)
+    wide = NS(bid=10.5, ask=10.5060)
+    assert not eng._market_allowed(nok, Slot(ref_spread=0.0009), wide, night, forced)
+    old = Slot(ref_spread=0.0009, blocked_since=time.time() - 11 * 3600)
+    assert eng._market_allowed(nok, old, wide, night, forced)        # tras 10 h se ejecuta
+    assert eng._market_allowed(nok, Slot(ref_spread=0.0009), NS(bid=10.5, ask=10.5009), night, forced)

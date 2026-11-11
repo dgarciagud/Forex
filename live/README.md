@@ -59,7 +59,8 @@ posición máxima no llega a 0,01 lotes.
 | `max_trades_per_day` | Si se supera, la asignación queda bloqueada |
 | Salto de precio | Si un cierre diario se mueve más de `spike_sigma` desviaciones → bloqueo. Si el dato es correcto: crea `state/approve_<CRUCE>_<AAAA-MM-DD>` y borra el bloqueo |
 | `max_lots` | Tope duro de posición por asignación (si se supera → bloqueo) |
-| Ventana de rollover | Entre `blackout_start` y `blackout_end` (hora del servidor) se cancelan las pendientes y no se opera |
+| Ventana de rollover | Entre `blackout_start` y `blackout_end` (23:45–01:00, hora del servidor) se cancelan las pendientes y no se opera |
+| Horario y spread de las órdenes a mercado | Spread de referencia = mediana de los ticks de 10:00–18:00 del servidor de los últimos `reference_days` días. Una orden a mercado solo sale si el spread ≤ `max_spread_mult` × referencia. Las **no urgentes** (nivel ya ejecutable) además solo dentro de `market_hours` (por defecto 01:00–23:45; EURNOK 10:00–22:00). Las **reducciones obligatorias** ignoran el horario y esperan a un spread normal como mucho `max_forced_wait_hours` (10 h). Mientras se aplaza, se cancelan las pendientes del par |
 | Ticks viejos | Si no llegan ticks durante `max_tick_age_seconds` (fin de semana, desconexión) se cancelan las pendientes |
 | Telegram (opcional) | Variables de entorno `TELEGRAM_TOKEN` y `TELEGRAM_CHAT_ID` |
 

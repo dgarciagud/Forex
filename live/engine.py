@@ -76,6 +76,8 @@ class Slot:
     dry: dict = field(default_factory=dict)   # últimas órdenes simuladas (evita repetir logs)
     spreads: deque = field(default_factory=lambda: deque(maxlen=720))  # ~1 h de spreads
     gap_cycles: int = 0  # ciclos seguidos con un nivel ya ejecutable
+    ref_spread: float | None = None      # spread mediano de horas líquidas (referencia)
+    blocked_since: float | None = None   # desde cuándo se aplaza una orden a mercado
 
 
 class Locks:
@@ -265,8 +267,10 @@ class Engine:
                 return
         else:
             slot.gap_cycles = 0
-        if plan.market_steps and not self._spread_ok(a, slot, tick):
+        if plan.market_steps and not self._market_allowed(a, slot, tick, server, plan):
+            self.b.cancel_all(a.symbol, magic)      # no dejar límites de niveles viejos
             return
+        slot.blocked_since = None
         if plan.market_steps:
             slot.gap_cycles = 0
             self.b.cancel_all(a.symbol, magic)
@@ -277,19 +281,38 @@ class Engine:
         self._sync_limit(a, magic, spec, tick, "sell", plan.sell_limit, plan.sell_steps)
 
     # ---------------------------------------------------------------- piezas
-    def _spread_ok(self, a, slot: Slot, tick) -> bool:
-        """Órdenes a mercado solo con spread normal (evita la apertura del domingo y el rollover)."""
-        if len(slot.spreads) < 30:
-            log.debug("%s: esperando muestras de spread antes de operar a mercado", a.key)
+    def _market_allowed(self, a, slot: Slot, tick, server: datetime, plan) -> bool:
+        """¿Se puede enviar ya la orden a mercado o conviene esperar?
+
+        * Reducciones obligatorias (fuera de rango): solo esperan a un spread normal, y como
+          mucho max_forced_wait_hours; después se ejecutan igualmente (control de riesgo).
+        * Resto (nivel ya ejecutable): además solo dentro de market_hours del par.
+        Spread normal = como mucho max_spread_mult × el spread mediano de horas líquidas.
+        """
+        forced = plan.reason.startswith("fuera de rango")
+        now = time.time()
+        if slot.blocked_since is None:
+            slot.blocked_since = now
+        waited_h = (now - slot.blocked_since) / 3600
+        start, end = a.market_hours or self.s.market_hours
+        if not forced and not _in_window(f"{server:%H:%M}", start, end):
+            log.debug("%s: fuera de horario de mercado (%s-%s); se aplaza", a.key, start, end)
             return False
-        normal = statistics.median(slot.spreads)
+        ref = slot.ref_spread
+        if ref is None:                                   # sin historial de ticks: última hora
+            if len(slot.spreads) < 30:
+                return False
+            ref = statistics.median(slot.spreads)
         spread = tick.ask - tick.bid
-        if spread > self.s.max_spread_mult * normal:
-            self.n.send(f"{a.key}: spread {spread:.6g} > {self.s.max_spread_mult}× el normal "
-                        f"({normal:.6g}); se aplaza la orden a mercado", key=f"spread:{a.key}",
-                        every_s=1800)
-            return False
-        return True
+        if spread <= self.s.max_spread_mult * ref:
+            return True
+        if forced and waited_h >= self.s.max_forced_wait_hours:
+            self.n.send(f"{a.key}: reducción obligatoria tras {waited_h:.1f} h esperando spread "
+                        f"normal; se ejecuta con spread {spread:.6g}", key=f"forced:{a.key}", every_s=3600)
+            return True
+        self.n.send(f"{a.key}: spread {spread:.6g} > {self.s.max_spread_mult}× referencia "
+                    f"({ref:.6g}); se aplaza la orden a mercado", key=f"spread:{a.key}", every_s=1800)
+        return False
 
     def _reconcile(self, a, slot: Slot, magic: int, spec, day: str) -> int | None:
         before = self.b.deals_after(a.symbol, magic, slot.last_ticket)
@@ -351,6 +374,13 @@ class Engine:
                                      self.s.risk_target, st.sigma_p, vpu, spec.step)
         slot.max_steps = int(min(a.max_lots, spec.volume_max) / spec.step + 1e-9)
         slot.daily = st
+        try:
+            slot.ref_spread = self.b.reference_spread(a.symbol, *self.s.liquid_hours,
+                                                      self.s.reference_days)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("%s: sin spread de referencia (%s); se usa la mediana de la última hora",
+                        a.key, exc)
+            slot.ref_spread = None
         row = {"utc": f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M}", "asignacion": a.key,
                "dia": f"{st.day:%Y-%m-%d}", "cierre": st.close, "equilibrio": round(st.eq, 6),
                "sigma_p": round(st.sigma_p, 6), "vol_anual_%": round(st.vol_pct * 1600, 2),
@@ -358,7 +388,8 @@ class Engine:
                "idm": self.s.idm, "peso": round(a.weight, 4),
                "pos_media_lotes": round(slot.n_avg * spec.step, 4),
                "pos_max_lotes": round(min(2 * slot.n_avg, slot.max_steps) * spec.step, 4),
-               "orden_lotes": round(s27.limit_order_steps(slot.n_avg, sp) * spec.step, 2)}
+               "orden_lotes": round(s27.limit_order_steps(slot.n_avg, sp) * spec.step, 2),
+               "spread_ref": slot.ref_spread}
         self._record(self.daily_csv, row)
         log.info("estado diario %s", row)
         if slot.n_avg * 2 < 1:
