@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+import numpy as np
 
 import pandas as pd
 
@@ -156,17 +158,31 @@ class MT5Broker:
         return int(rates[0]["time"]) if rates is not None and len(rates) else None
 
     def reference_spread(self, symbol: str, start: str, end: str, days: int) -> float | None:
-        """Spread mediano de los últimos `days` días en la franja líquida [start, end) (hora servidor)."""
-        now = datetime.now()
-        ticks = self.mt5.copy_ticks_range(symbol, now - timedelta(days=days + 3), now + timedelta(days=1),
-                                          self.mt5.COPY_TICKS_INFO)
-        if ticks is None or len(ticks) == 0:
-            return None
-        df = pd.DataFrame(ticks)
-        hhmm = pd.to_datetime(df["time"], unit="s").dt.strftime("%H:%M")
-        keep = (hhmm >= start) & (hhmm < end) if start <= end else (hhmm >= start) | (hhmm < end)
-        spread = (df["ask"] - df["bid"])[keep & (df["ask"] > df["bid"])]
-        return float(spread.median()) if len(spread) > 100 else None
+        """Mediana de las medianas diarias del spread en la franja [start, end) (hora servidor).
+
+        Se piden los ticks día a día y solo de esa franja, para no cargar días enteros de
+        ticks en memoria (pico de ~500 MB con 8 días completos; importa en un VPS de 4 GB).
+        MT5 guarda la hora del servidor como si fuera UTC, así que la franja se pide en UTC.
+        """
+        h0, m0 = map(int, start.split(":"))
+        h1, m1 = map(int, end.split(":"))
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        medians = []
+        for back in range(1, days * 2 + 4):               # días naturales hacia atrás (saltando findes)
+            day = today - timedelta(days=back)
+            t0 = day.replace(hour=h0, minute=m0)
+            t1 = day.replace(hour=h1, minute=m1) + (timedelta(days=1) if end <= start else timedelta(0))
+            ticks = self.mt5.copy_ticks_range(symbol, t0, t1, self.mt5.COPY_TICKS_INFO)
+            if ticks is None or len(ticks) < 100:
+                continue
+            spread = ticks["ask"] - ticks["bid"]
+            spread = spread[spread > 0]
+            if len(spread):
+                medians.append(float(np.median(spread)))
+            del ticks, spread
+            if len(medians) >= days:
+                break
+        return float(np.median(medians)) if medians else None
 
     def value_per_unit_lot(self, symbol: str, price: float) -> float:
         """Ganancia (divisa de la cuenta) de 1 lote largo cuando el precio sube 1 unidad."""
