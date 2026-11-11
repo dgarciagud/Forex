@@ -1,0 +1,47 @@
+== Tipo de día (eficiencia intradía)
+                      pnl_medio_pb  días  anualizado_%  acierto_%
+eficiencia                                                       
+Ida y vuelta (rango)          9.63  5544         98.62      70.60
+Mixto                         5.40  5543         55.31      62.67
+Direccional                 -12.85  5543       -131.62      52.90
+
+== Tamaño del movimiento diario
+            pnl_medio_pb  días  anualizado_%  acierto_%
+movimiento                                             
+< 0,5 σ             7.92  7657         81.08      68.19
+0,5–1 σ             3.40  4775         34.87      60.08
+1–2 σ              -9.35  3484        -95.79      53.70
+> 2 σ             -45.34   713       -464.28      48.81
+
+== Fuerza de la tendencia de fondo
+           pnl_medio_pb  días  anualizado_%  acierto_%
+tendencia                                             
+Débil              0.28  5554          2.91      60.68
+Media              0.49  5553          5.03      62.06
+Fuerte             1.39  5554         14.28      63.27
+
+== Régimen de volatilidad
+           pnl_medio_pb  días  anualizado_%  acierto_%
+vol_q                                                 
+Vol baja           0.55  5132          5.63      62.31
+Vol media          0.08  6037          0.84      61.59
+Vol alta           1.59  5492         16.28      62.16
+
+== Por año
+day
+2010     6.39
+2011    -3.64
+2012    17.15
+2013     8.38
+2014     2.12
+2015    29.27
+2016    28.30
+2017     5.77
+2018    -8.50
+2019   -20.63
+2020    13.03
+2021    17.60
+2022    10.35
+2023     2.76
+2024    -7.02
+2025    19.19
