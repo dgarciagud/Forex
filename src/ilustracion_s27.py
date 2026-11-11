@@ -57,7 +57,7 @@ def hourly_path(pair, h, daily):
         trades[i] = new - cur
         cur = new
         pos[i] = cur
-    out = pd.DataFrame({"close": c, "equil": E, "sp": sp, "trend": tr, "att": M, "fc": f,
+    out = pd.DataFrame({"close": c, "equil": E, "sp": sp, "trend": tr, "att": M, "fc": f, "n10": n10,
                         "opt_lots": opt / 100, "pos_lots": pos / 100, "trade": trades / 100},
                        index=h.index)
     # precio en el que el forecast llega a +-20 (posición máxima)
