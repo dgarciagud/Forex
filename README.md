@@ -201,3 +201,20 @@ Sin buffer opera ~900–2.000 lotes/día (con lotes de 10.000) y el coste sube a
 en FX spot es mejor un buffer amplio. La conclusión no cambia: con supuestos de llenado
 realistas la estrategia 27 pierde en estos pares. Breakout con FDM del libro: SR neto 0.09
 (sin cambios relevantes).
+
+## Filtro "no ampliar tras k·σ" (S27)
+
+`python src/run_filtro_sigma.py` → `results/filtro_sigma/`. Si el precio se ha movido en contra
+más de k·σ diaria desde la apertura del día FX, no se amplía la posición (solo reducir/cerrar).
+
+| S27 completa, 1h, buffer 25 % (Sharpe) | sin filtro | 0,5 σ | 1 σ | 1,5 σ | 2 σ |
+|---|---|---|---|---|---|
+| Mercado, medio spread | −0.21 | −0.20 | −0.22 | −0.27 | −0.29 |
+| Mercado, sin costes | 0.39 | 0.30 | 0.35 | 0.33 | 0.32 |
+| Límite al tocar | 1.00 | 0.95 | 0.97 | 0.97 | 0.99 |
+| Límite, atravesar ½ spread | −0.35 | −0.23 | −0.38 | −0.40 | −0.37 |
+
+**No mejora.** Con escalar 20 la posición ya está cerca del tope cuando el precio se ha alejado
+1 σ (de media al 69 % del máximo en esas horas, frente al 31 % el resto), así que el filtro
+bloquea poco: la pérdida de los días direccionales viene del inventario ya acumulado, no de
+las ampliaciones posteriores. Con 0,5 σ reduce costes y caída máxima, pero también la ventaja bruta.

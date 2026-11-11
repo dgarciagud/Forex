@@ -70,6 +70,8 @@ class Config:
     trend_slow: int = 64
     cost_mult: float = 1.0            # multiplicador sobre HALF_SPREAD (0 = sin costes)
     fill_lag: int = 1                 # "close": se ejecuta 1 vela después de la señal (como Carver)
+    add_stop_sigma: float | None = None   # no ampliar posición si el precio se ha movido en
+                                          # contra > k·σ diaria desde la apertura del día
     execution: str = "close"          # "close": a mercado al cierre; "limit": órdenes límite
     limit_pen_mult: float = 1.0       # penetración exigida a la límite, en medios spreads
     buffer_frac: float = 0.10         # buffer = fracción de la posición con forecast 10 (mín. 1 lote)
@@ -151,6 +153,8 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
     sig = sig.reindex(days)
     eq_a, sp_a, tr_a, at_a = (sig[k].to_numpy() for k in ("eq", "sigma_p", "trend", "att"))
     qpu_a = qpu.reindex(days).ffill().to_numpy()
+    day_open = h["open"].groupby(days).transform("first").to_numpy()
+    kstop = cfg.add_stop_sigma
     half_spread = HALF_SPREAD[pair] * cfg.cost_mult
     lot = cfg.lot
 
@@ -221,6 +225,9 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
                         fpx, cst = level, 0.0
                     else:
                         break
+                    if (kstop is not None and tgt > max(prev, 0)
+                            and fpx < day_open[i] - kstop * sp):
+                        break                             # filtro: no ampliar largos tras caída > k·σ
                     d = tgt - prev
                     bar_pnl += d * lot * (c[i] - fpx); bar_cost += d * lot * cst
                     nfills += d; prev = tgt
@@ -237,6 +244,9 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
                         fpx, cst = level, 0.0
                     else:
                         break
+                    if (kstop is not None and tgt < min(prev, 0)
+                            and fpx > day_open[i] + kstop * sp):
+                        break                             # filtro: no ampliar cortos tras subida > k·σ
                     d = prev - tgt
                     bar_pnl -= d * lot * (c[i] - fpx); bar_cost += d * lot * cst
                     nfills += d; prev = tgt
@@ -263,6 +273,11 @@ def simulate_pair(pair: str, h: pd.DataFrame, sig: pd.DataFrame, qpu: pd.Series,
                 new_pos = math.ceil(n_opt + buf - 1.0)
             else:
                 new_pos = pos
+            if kstop is not None and n_opt is not None:
+                if c[i] < day_open[i] - kstop * sp:
+                    new_pos = min(new_pos, max(pos, 0))   # no ampliar largos tras caída > k·σ
+                elif c[i] > day_open[i] + kstop * sp:
+                    new_pos = max(new_pos, min(pos, 0))   # no ampliar cortos tras subida > k·σ
             if cfg.execution == "close" and cfg.fill_lag:
                 pending = new_pos
             elif new_pos != pos:
