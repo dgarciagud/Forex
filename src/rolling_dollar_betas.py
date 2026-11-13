@@ -112,8 +112,13 @@ def plot_all_in_one(b: pd.DataFrame, path):
     fig, ax = plt.subplots(figsize=(13, 6))
     for c, col in zip(b.columns, COLORS):
         ax.plot(b.index, b[c], color=col, lw=1.4, label=c)
-        last = b[c].dropna()
-        ax.text(last.index[-1], last.iloc[-1], f" {c}", color=INK2, fontsize=8.5, va="center")
+    # etiquetas directas al final, separadas verticalmente para que no se pisen
+    last = b.ffill().iloc[-1].sort_values()
+    ys, gap = [], 0.07
+    for v in last.values:
+        ys.append(max(v, ys[-1] + gap) if ys else v)
+    for (c, v), y in zip(last.items(), ys):
+        ax.text(b.index[-1], y, f"  {c} {v:.2f}", color=INK2, fontsize=8.5, va="center")
     _decorate(ax, label_marks=True)
     ax.set_title(f"Beta rolling ({MAIN_W} días) de cada divisa frente al factor dólar (leave-one-out)",
                  loc="left", fontsize=12.5)
@@ -133,6 +138,7 @@ def plot_grid(series: dict[str, pd.DataFrame], colors: dict, title: str, path):
         _decorate(ax)
         ax.set_title(c, loc="left", fontsize=11)
     axes.flat[-1].axis("off")
+    axes.flat[-2].tick_params(labelbottom=True)
     handles, labels = axes.flat[0].get_legend_handles_labels()
     axes.flat[-1].legend(handles, labels, loc="center", fontsize=11, frameon=False,
                          title="Líneas discontinuas: 06-09-2011 y 15-01-2015 (SNB)")
