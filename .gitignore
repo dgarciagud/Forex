@@ -1,5 +1,6 @@
 data/raw/*
 !data/raw/*_D1.csv
+!data/raw/*_fred.csv
 data/raw_histdata/
 __pycache__/
 live/state/
